@@ -1,0 +1,1694 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu May 18 16:37:36 2023
+
+@author: clarahennings
+"""
+
+
+#%% ### Baseline 1989-2045 ###
+
+import numpy as np
+import scipy.stats
+import pandas as pd
+from os import chdir
+import matplotlib.pyplot as plt
+
+stock_flow_timeseries_baseline = pd.read_excel('Calculations.xlsx', sheet_name='model_input', usecols=['year', 'inflow_baseline'])
+stock_flow_timeseries_baseline = stock_flow_timeseries_baseline.set_index(['year'])
+ 
+time_max = stock_flow_timeseries_baseline.shape[0]
+timesteps = np.arange(0, time_max)
+
+curve_shape_baseline = 4
+curve_scale_baseline = 20
+curve_surv_baseline = scipy.stats.weibull_min.sf(timesteps, curve_shape_baseline, 0, curve_scale_baseline)
+curve_surv_baseline = pd.DataFrame(curve_surv_baseline, columns=['survival probability'])
+
+curve_surv_matrix_baseline = pd.DataFrame(0, index=timesteps, columns=timesteps)
+for time in timesteps:
+    curve_surv_matrix_baseline.loc[time:, time] = curve_surv_baseline['survival probability'].values[:time_max - time]
+
+cohort_surv_matrix_baseline = pd.DataFrame(0, index=timesteps, columns=timesteps)
+for time in timesteps:
+    cohort_surv_matrix_baseline.loc[:, time] = curve_surv_matrix_baseline.loc[:, time] * stock_flow_timeseries_baseline['inflow_baseline'].iloc[time]
+cohort_surv_matrix_baseline.index = stock_flow_timeseries_baseline.index
+
+stock_flow_timeseries_baseline['stock'] = cohort_surv_matrix_baseline.sum(axis=1)
+stock_flow_timeseries_baseline['nas'] = np.diff(stock_flow_timeseries_baseline['stock'], prepend=0) 
+stock_flow_timeseries_baseline['outflow'] = stock_flow_timeseries_baseline['inflow_baseline'] - stock_flow_timeseries_baseline['nas']
+
+stock_flow_timeseries_baseline = stock_flow_timeseries_baseline / 1000 #conversion from kg to t
+
+blue = 'blue'
+orange = 'orange'
+
+
+plt.plot(stock_flow_timeseries_baseline.index, stock_flow_timeseries_baseline['inflow_baseline'], label = 'inflows', color = blue)
+plt.plot(stock_flow_timeseries_baseline.index, stock_flow_timeseries_baseline['outflow'], label = 'outflows', color=orange)
+plt.xlabel('Year', fontsize = 12)
+plt.ylabel('Neodymium flows (t/yr)', fontsize = 12)
+plt.xticks(labelsize = 12)
+plt.legend()
+plt.gcf().set_size_inches(10, 6)
+plt.show()
+
+
+stock_flow_timeseries_baseline[['stock']].plot(kind="area", color='grey', legend=False)
+plt.xlabel('Year', fontsize=12)
+plt.ylabel('Neodymium stocks (t)', fontsize = 12)
+plt.xticks(labelsize = 12)
+plt.gcf().set_size_inches(10, 6)
+plt.show()
+
+# Absolute number of wind turbines between 1989 and 2023 installed
+
+filtered_df = stock_flow_timeseries_absolute.loc['1989':'2023']
+
+dark_blue = 'darkblue'
+light_blue = 'lightblue'
+
+plt.figure(figsize=(12, 6))  
+
+plt.bar(filtered_df.index, filtered_df['inflow_onshore_absolute'], color=light_blue, label='Onshore', width=0.4, align='center')
+plt.bar(filtered_df.index, filtered_df['inflow_offshore_absolute'], color=dark_blue, label='Offshore', width=0.4, align='edge')
+
+plt.xlabel('Year')
+plt.ylabel('Number of wind turbines')
+plt.legend()
+plt.show()
+
+
+# Capacity historically and future
+
+stock_flow_timeseries_baseline_cap = pd.read_excel('Calculations.xlsx', sheet_name='model_input', usecols=['period', 'onshore', 'offshore', 'cumulative'])
+stock_flow_timeseries_baseline_cap = stock_flow_timeseries_baseline_cap.set_index(['period'])
+
+filtered_df = stock_flow_timeseries_baseline_cap.loc[:'2041-2045']
+
+dark_blue = 'darkblue'
+light_blue = 'lightblue'
+
+x_positions = np.arange(len(filtered_df.index))
+
+plt.figure(figsize=(12, 6))
+
+plt.plot(x_positions, filtered_df['onshore'], color=light_blue, label='Onshore')
+plt.plot(x_positions, filtered_df['offshore'], color=dark_blue, label='Offshore')
+plt.plot(x_positions, filtered_df['cumulative'], color='grey', label='Cumulative')
+
+red_dot_indices = filtered_df.index.to_series().between('2021', '2022')
+plt.scatter(x_positions[red_dot_indices], filtered_df.loc[red_dot_indices, 'onshore'], color='red', marker='o', label='current', zorder=5)
+plt.scatter(x_positions[red_dot_indices], filtered_df.loc[red_dot_indices, 'offshore'], color='red', marker='o', zorder=5)
+
+plt.xlabel('Period')
+plt.ylabel('Capacity (GW)')
+plt.legend()
+plt.xticks(x_positions, filtered_df.index)
+plt.show()
+
+
+
+#%% ### Scenario 1.1: Commission's Proposal of 15% consumption to be satisfied from secondary material sources, stays constant after 2030 ###
+
+import numpy as np
+import scipy.stats
+import pandas as pd
+import matplotlib.pyplot as plt
+from os import chdir
+from scipy.interpolate import splrep, splev
+from matplotlib.ticker import FuncFormatter
+
+stock_flow_timeseries_baseline_sc11 = pd.read_excel('Calculations.xlsx', sheet_name='model_input', usecols=['year', 'inflow_baseline'])
+stock_flow_timeseries_baseline_sc11 = stock_flow_timeseries_baseline_sc11.set_index(['year'])
+
+time_max_sc11 = stock_flow_timeseries_baseline_sc11.shape[0]
+timesteps_sc11 = np.arange(0, time_max_sc11)
+
+curve_shape_baseline_sc11 = 4
+curve_scale_baseline_sc11 = 20
+curve_surv_baseline_sc11 = scipy.stats.weibull_min.sf(timesteps_sc11, curve_shape_baseline_sc11, 0, curve_scale_baseline_sc11)
+curve_surv_baseline_sc11 = pd.DataFrame(curve_surv_baseline_sc11, columns=['survival probability'])
+
+curve_surv_matrix_baseline_sc11 = pd.DataFrame(0, index=timesteps_sc11, columns=timesteps_sc11)
+for time_sc11 in timesteps_sc11:
+    curve_surv_matrix_baseline_sc11.loc[time_sc11:, time_sc11] = curve_surv_baseline_sc11['survival probability'].values[:time_max_sc11 - time_sc11]
+
+cohort_surv_matrix_baseline_sc11 = pd.DataFrame(0, index=timesteps_sc11, columns=timesteps_sc11)
+for time_sc11 in timesteps_sc11:
+    cohort_surv_matrix_baseline_sc11.loc[:, time_sc11] = curve_surv_matrix_baseline_sc11.loc[:, time_sc11] * stock_flow_timeseries_baseline_sc11['inflow_baseline'].iloc[time_sc11]
+cohort_surv_matrix_baseline_sc11.index = stock_flow_timeseries_baseline_sc11.index
+
+stock_flow_timeseries_baseline_sc11['stock_sc11'] = cohort_surv_matrix_baseline_sc11.sum(axis=1)
+stock_flow_timeseries_baseline_sc11['nas_sc11'] = np.diff(stock_flow_timeseries_baseline_sc11['stock_sc11'], prepend=0) 
+stock_flow_timeseries_baseline_sc11['outflow_sc11'] = stock_flow_timeseries_baseline_sc11['inflow_baseline'] - stock_flow_timeseries_baseline_sc11['nas_sc11']
+
+stock_flow_timeseries_baseline_sc11 = stock_flow_timeseries_baseline_sc11 / 1000  # conversion from kg to MT
+
+stock_flow_timeseries_sc11 = stock_flow_timeseries_baseline_sc11.copy()
+
+years_sc11 = stock_flow_timeseries_sc11.index
+recycling_rate_start_sc11 = 0.01 
+recycling_rate_end_sc11 = 0.15    
+
+inflow_target_sc11 = np.zeros(len(years_sc11))  
+
+inflow_target_sc11[(years_sc11 >= 2022) & (years_sc11 <= 2023)] = np.linspace(recycling_rate_start_sc11, recycling_rate_end_sc11, np.sum((years_sc11 >= 2022) & (years_sc11 <= 2023)))
+
+extrapolation_years_sc11 = (years_sc11 >= 2023) & (years_sc11 <= 2030)
+extrapolation_values_sc11 = np.linspace(recycling_rate_start_sc11, recycling_rate_end_sc11, np.sum(extrapolation_years_sc11))
+inflow_target_sc11[extrapolation_years_sc11] = extrapolation_values_sc11
+inflow_target_sc11[years_sc11 >= 2031] = recycling_rate_end_sc11
+stock_flow_timeseries_sc11['inflow_target_sc11'] = inflow_target_sc11
+filtered_df_sc11 = stock_flow_timeseries_sc11[stock_flow_timeseries_sc11.index >= 2022]
+
+plt.plot(filtered_df_sc11.index, filtered_df_sc11['inflow_target_sc11'], label='Inflow Target', color='blue')
+
+def percent_formatter_sc11(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc11))
+plt.axhline(y=0.15, color='red', linestyle='--', label='41% target by 2045')
+plt.ylim(0, 1)
+plt.xlabel('Year')
+plt.ylabel('Rate')
+plt.title('Scenario 1.1: inflow targets')
+plt.show()
+
+# Secondary neodymium required to meet target inflow
+
+stock_flow_timeseries_sc11['sec_nd_sc11'] = stock_flow_timeseries_sc11['inflow_baseline'] * stock_flow_timeseries_sc11['inflow_target_sc11']
+
+filtered_df_sc11 = stock_flow_timeseries_sc11[(stock_flow_timeseries_sc11.index >= 2022) & (stock_flow_timeseries_sc11.index <= 2045)]
+
+filtered_df_sc11[['inflow_baseline', 'sec_nd_sc11']].plot.bar()
+plt.xticks(range(0, len(filtered_df_sc11.index), 10), filtered_df_sc11.index[::10], rotation='horizontal')
+plt.xlabel('Year')
+plt.ylabel('Neodymium (t/yr)')
+plt.title('Scenario 1.1: Secondary neodymium vs. neodymium inflow')
+
+new_labels_sc11 = {
+    'inflow_baseline': 'inflow',
+    'sec_nd_sc11': 'secondary neodymium'
+}
+plt.legend(labels=new_labels_sc11.values())
+plt.show()
+
+# Comparison outflows vs. secondary neodymium requried
+
+filtered_df_sc11 = stock_flow_timeseries_sc11[(stock_flow_timeseries_sc11.index >= 2022) & (stock_flow_timeseries_sc11.index <= 2045)]
+
+filtered_df_sc11[['outflow_sc11', 'sec_nd_sc11']].plot.bar()
+plt.xticks(range(0, len(filtered_df_sc11.index), 10), filtered_df_sc11.index[::10], rotation='horizontal')
+plt.xlabel('Year')
+plt.ylabel('Neodymium (t/yr)')
+plt.title('Scenario 1.1: Secondary neodymium required vs. outflow')
+
+new_labels_sc11 = {
+    'outflow_sc11': 'neodymium outflow',
+    'sec_nd_sc11': 'secondary neodymium required'
+}
+plt.legend(labels=new_labels_sc11.values())
+plt.show()
+
+# Calculation of outflow recycling rate required to achieve targets
+
+stock_flow_timeseries_sc11['outflow_rec_rate_sc11'] = stock_flow_timeseries_sc11['sec_nd_sc11'] / stock_flow_timeseries_sc11['outflow_sc11']
+
+filtered_df_sc11 = stock_flow_timeseries_sc11[stock_flow_timeseries_sc11.index >= 2022]
+
+def percent_formatter_sc11(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc11))
+
+plt.axhline(y=1.0, color='red', linestyle='--')
+plt.plot(filtered_df_sc11.index, filtered_df_sc11['outflow_rec_rate_sc11'], label='Outflow Recycling Rate', color='blue')
+plt.title('Scenario 1.1: outflow recycling rate')
+plt.xlabel('Year')
+plt.ylabel('Rate')
+plt.show()
+
+
+    
+    
+#%% ### Scenario 1.2: Commissions Proposal of 15% consumption to be satisfied from secondary material sources, increases until 100% reached ###
+
+import numpy as np
+import scipy.stats
+import pandas as pd
+from os import chdir
+import matplotlib.pyplot as plt
+from scipy.interpolate import splrep, splev
+from matplotlib.ticker import FuncFormatter
+
+stock_flow_timeseries_baseline_sc12 = pd.read_excel('Calculations.xlsx', sheet_name='model_input', usecols=['year', 'inflow_baseline'])
+stock_flow_timeseries_baseline_sc12 = stock_flow_timeseries_baseline_sc12.set_index(['year'])
+
+time_max_sc12 = stock_flow_timeseries_baseline_sc12.shape[0]
+timesteps_sc12 = np.arange(0, time_max_sc12)
+
+curve_shape_baseline_sc12 = 4
+curve_scale_baseline_sc12 = 20
+curve_surv_baseline_sc12 = scipy.stats.weibull_min.sf(timesteps_sc12, curve_shape_baseline_sc12, 0, curve_scale_baseline_sc12)
+curve_surv_baseline_sc12 = pd.DataFrame(curve_surv_baseline_sc12, columns=['survival probability'])
+
+curve_surv_matrix_baseline_sc12 = pd.DataFrame(0, index=timesteps_sc12, columns=timesteps_sc12)
+for time_sc12 in timesteps_sc12:
+    curve_surv_matrix_baseline_sc12.loc[time_sc12:, time_sc12] = curve_surv_baseline_sc12['survival probability'].values[:time_max_sc12 - time_sc12]
+
+cohort_surv_matrix_baseline_sc12 = pd.DataFrame(0, index=timesteps_sc12, columns=timesteps_sc12)
+for time_sc12 in timesteps_sc12:
+    cohort_surv_matrix_baseline_sc12.loc[:, time_sc12] = curve_surv_matrix_baseline_sc12.loc[:, time_sc12] * stock_flow_timeseries_baseline_sc12['inflow_baseline'].iloc[time_sc12]
+cohort_surv_matrix_baseline_sc12.index = stock_flow_timeseries_baseline_sc12.index
+
+stock_flow_timeseries_baseline_sc12['stock_sc12'] = cohort_surv_matrix_baseline_sc12.sum(axis=1)
+stock_flow_timeseries_baseline_sc12['nas_sc12'] = np.diff(stock_flow_timeseries_baseline_sc12['stock_sc12'], prepend=0) 
+stock_flow_timeseries_baseline_sc12['outflow_sc12'] = stock_flow_timeseries_baseline_sc12['inflow_baseline'] - stock_flow_timeseries_baseline_sc12['nas_sc12']
+
+stock_flow_timeseries_baseline_sc12 = stock_flow_timeseries_baseline_sc12 / 1000  # conversion from kg to MT
+
+stock_flow_timeseries_sc12 = stock_flow_timeseries_baseline_sc12.copy()
+
+years_sc12 = stock_flow_timeseries_sc12.index
+recycling_rate_start_sc12 = 0.01  # 1% in 2022
+recycling_rate_end_sc12 = 0.15   # 15% in 2030
+
+inflow_target_sc12 = np.zeros(len(years_sc12))  
+
+inflow_target_sc12[(years_sc12 >= 2022) & (years_sc12 <= 2023)] = np.linspace(recycling_rate_start_sc12, recycling_rate_end_sc12, np.sum((years_sc12 >= 2022) & (years_sc12 <= 2023)))
+
+extrapolation_years_sc12 = (years_sc12 >= 2023) & (years_sc12 <= 2030)
+extrapolation_values_sc12 = np.linspace(recycling_rate_start_sc12, recycling_rate_end_sc12, np.sum(extrapolation_years_sc12))
+inflow_target_sc12[extrapolation_years_sc12] = extrapolation_values_sc12
+
+extrapolation_years_2030_to_2045_sc12 = (years_sc12 >= 2031) & (years_sc12 <= 2045)
+
+known_years_sc12 = years_sc12[(years_sc12 >= 2022) & (years_sc12 <= 2030)]
+known_values_sc12 = inflow_target_sc12[(years_sc12 >= 2022) & (years_sc12 <= 2030)]
+
+coefficients_sc12 = np.polyfit(known_years_sc12, known_values_sc12, 1)
+extrapolated_values_2030_to_2045_sc12 = np.polyval(coefficients_sc12, years_sc12[extrapolation_years_2030_to_2045_sc12])
+
+inflow_target_sc12[extrapolation_years_2030_to_2045_sc12] = extrapolated_values_2030_to_2045_sc12
+stock_flow_timeseries_sc12['inflow_target_sc12'] = inflow_target_sc12
+
+filtered_df_sc12 = stock_flow_timeseries_sc12[stock_flow_timeseries_sc12.index >= 2022]
+
+plt.plot(filtered_df_sc12.index, filtered_df_sc12['inflow_target_sc12'], label='Inflow Target', color='blue')
+
+def percent_formatter_sc12(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc12))
+plt.axhline(y=0.15, color='red', linestyle='--')
+plt.ylim(0, 1.0)  # Adjust the y-axis limits if necessary
+plt.xlabel('Year')
+plt.ylabel('Rate')
+plt.title('Scenario 1.2: Inflow Targets')
+plt.show()
+
+# Multiply inflow target by inflows to get sec nd required
+
+stock_flow_timeseries_sc12['sec_nd_sc12'] = stock_flow_timeseries_sc12['inflow_baseline'] * stock_flow_timeseries_sc12['inflow_target_sc12']
+
+filtered_df_sc12 = stock_flow_timeseries_sc12[(stock_flow_timeseries_sc12.index >= 2022) & (stock_flow_timeseries_sc12.index <= 2045)]
+
+filtered_df_sc12[['inflow_baseline', 'sec_nd_sc12']].plot.bar()
+plt.xticks(range(0, len(filtered_df_sc12.index), 10), filtered_df_sc12.index[::10], rotation='horizontal')
+plt.xlabel('Year')
+plt.ylabel('Neodymium (t/yr)')
+plt.title('Scenario 1.2: Secondary neodymium vs. neodymium inflow')  # Renamed to Scenario 1.2
+
+new_labels_sc12 = {
+    'sec_nd_sc12': 'Secondary neodymium required',
+    'inflow_baseline': 'Neodymium inflow'
+}
+plt.legend(labels=new_labels_sc12.values())
+plt.show()
+
+# Comparison outflows vs. sec nd
+
+filtered_df_sc12 = stock_flow_timeseries_sc12[(stock_flow_timeseries_sc12.index >= 2022) & (stock_flow_timeseries_sc12.index <= 2045)]
+
+filtered_df_sc12[['outflow_sc12', 'sec_nd_sc12']].plot.bar()
+plt.xticks(range(0, len(filtered_df_sc12.index), 10), filtered_df_sc12.index[::10], rotation='horizontal')
+plt.xlabel('Year')
+plt.ylabel('Neodymium (t/yr)')
+plt.title('Scenario 1.2: Secondary neodymium required vs. neodymium inflow')  # Renamed to Scenario 1.2
+
+new_labels_sc12 = {
+    'outflow_sc12': 'Neodymium outflow',
+    'sec_nd_sc12': 'Secondary neodymium required'
+}
+plt.legend(labels=new_labels_sc12.values())
+plt.show()
+
+# Calculation of outflow rec rate required to achieve targets
+
+stock_flow_timeseries_sc12['outflow_rec_rate_sc12'] = stock_flow_timeseries_sc12['sec_nd_sc12'] / stock_flow_timeseries_sc12['outflow_sc12']
+
+filtered_df_sc12 = stock_flow_timeseries_sc12[stock_flow_timeseries_sc12.index >= 2022]
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc12))
+
+plt.axhline(y=1.0, color='red', linestyle='--')
+
+plt.plot(filtered_df_sc12.index, filtered_df_sc12['outflow_rec_rate_sc12'], label='Outflow Recycling Rate', color='blue')
+
+plt.title('Scenario 1.2: Outflow Recycling Rate')  # Renamed to Scenario 1.2
+
+plt.xlabel('Year')
+plt.ylabel('Rate')
+
+plt.show()
+
+
+
+#%% Combination of plots 1.1 and 1.2
+
+
+plt.plot(filtered_df_sc11.index, filtered_df_sc11['inflow_target_sc11'], label='Scenario 1.1', color='dimgrey')
+plt.plot(filtered_df_sc12.index, filtered_df_sc12['inflow_target_sc12'], label='Scenario 1.2', color='lightgrey')
+
+def percent_formatter_sc11(x, pos):
+    return f'{x*100:.0f}%'
+
+def percent_formatter_sc12(x, pos):
+    return f'{x*100:.0f}%'
+
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc11))
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc12))
+plt.scatter([2030], [0.15], color='red', marker='o', label='2030 Target')
+plt.ylim(0, 1.0)  
+
+plt.xlabel('Year', fontsize = 12)
+plt.ylabel('Rate', fontsize = 12)
+plt.legend()
+plt.show()
+
+
+fig, ax = plt.subplots(figsize=(12,6))
+filtered_df_sc11[['sec_nd_sc11']].plot.bar(ax=ax, color='lightcoral', width=0.4, position=1, label='Scenario 1.1')
+filtered_df_sc12[['sec_nd_sc12', 'inflow_baseline']].plot.bar(ax=ax, color=['red', 'darkblue'], width=0.4)
+ax.set_xticks(range(0, len(filtered_df_sc11.index), 5))
+ax.set_xticklabels(filtered_df_sc11.index[::5], rotation=0)
+plt.xlabel('Year', fontsize = 12)
+plt.ylabel('Neodymium (t/yr)', fontsize = 12)
+
+plt.legend(["Scenario 1.1", "Scenario 1.2", "Inflows"])
+plt.show()
+
+
+
+fig, ax = plt.subplots(figsize=(12, 6))
+width = 0.2
+x = np.arange(len(filtered_df_sc11.index))
+ax.bar(x, filtered_df_sc11['sec_nd_sc11'], width, label='Scenario 1.1', color='lightcoral')
+
+ax.bar(x + width, filtered_df_sc12['sec_nd_sc12'], width, label='Scenario 1.2', color='red')
+
+ax.bar(x + 2 * width, filtered_df_sc11['outflow_sc11'], width, label='Outflow', color='orange')
+xticks_interval = 5
+ax.set_xticks(x[::xticks_interval] + 1.5 * width)
+ax.set_xticklabels(filtered_df_sc11.index[::xticks_interval], rotation='horizontal')
+ax.set_xlabel('Year', fontsize = 12)
+ax.set_ylabel('Neodymium (t/yr)', fontsize = 12)
+plt.legend()
+plt.show()
+
+
+
+plt.plot(filtered_df_sc11.index, filtered_df_sc11['outflow_rec_rate_sc11'], label='Scenario 1.1', color='dimgrey')
+plt.plot(filtered_df_sc12.index, filtered_df_sc12['outflow_rec_rate_sc12'], label='Scenario 1.2', color='lightgrey')
+
+def percent_formatter_sc11(x, pos):
+    return f'{x*100:.0f}%'
+
+def percent_formatter_sc12(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc11))
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc12))
+plt.axhline(y=1.0, color='red', linestyle='--', label = "100% outflow recycling")
+
+plt.xlabel('Year')
+plt.ylabel('Rate')
+plt.legend()
+plt.show()
+
+
+#%% ### Scenario 2.1: Council's Proposal of 20% consumption to be satisfied from secondary material sources, stays constant after 2030
+
+import numpy as np
+import scipy.stats
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.interpolate import splrep, splev
+from matplotlib.ticker import FuncFormatter
+
+stock_flow_timeseries_baseline_sc21 = pd.read_excel('Calculations.xlsx', sheet_name='model_input', usecols=['year', 'inflow_baseline'])
+stock_flow_timeseries_baseline_sc21 = stock_flow_timeseries_baseline_sc21.set_index(['year'])
+
+time_max_sc21 = stock_flow_timeseries_baseline_sc21.shape[0]
+timesteps_sc21 = np.arange(0, time_max_sc21)
+
+curve_shape_baseline_sc21 = 4
+curve_scale_baseline_sc21 = 20
+curve_surv_baseline_sc21 = scipy.stats.weibull_min.sf(timesteps_sc21, curve_shape_baseline_sc21, 0, curve_scale_baseline_sc21)
+curve_surv_baseline_sc21 = pd.DataFrame(curve_surv_baseline_sc21, columns=['survival probability'])
+
+curve_surv_matrix_baseline_sc21 = pd.DataFrame(0, index=timesteps_sc21, columns=timesteps_sc21)
+for time_sc21 in timesteps_sc21:
+    curve_surv_matrix_baseline_sc21.loc[time_sc21:, time_sc21] = curve_surv_baseline_sc21['survival probability'].values[:time_max_sc21 - time_sc21]
+
+cohort_surv_matrix_baseline_sc21 = pd.DataFrame(0, index=timesteps_sc21, columns=timesteps_sc21)
+for time_sc21 in timesteps_sc21:
+    cohort_surv_matrix_baseline_sc21.loc[:, time_sc21] = curve_surv_matrix_baseline_sc21.loc[:, time_sc21] * stock_flow_timeseries_baseline_sc21['inflow_baseline'].iloc[time_sc21]
+cohort_surv_matrix_baseline_sc21.index = stock_flow_timeseries_baseline_sc21.index
+
+stock_flow_timeseries_baseline_sc21['stock_sc21'] = cohort_surv_matrix_baseline_sc21.sum(axis=1)
+stock_flow_timeseries_baseline_sc21['nas_sc21'] = np.diff(stock_flow_timeseries_baseline_sc21['stock_sc21'], prepend=0)
+stock_flow_timeseries_baseline_sc21['outflow_sc21'] = stock_flow_timeseries_baseline_sc21['inflow_baseline'] - stock_flow_timeseries_baseline_sc21['nas_sc21']
+
+stock_flow_timeseries_baseline_sc21 = stock_flow_timeseries_baseline_sc21 / 1000  # Conversion from kg to MT
+
+stock_flow_timeseries_sc21 = stock_flow_timeseries_baseline_sc21.copy()  # Renamed to sc_21
+
+years_sc21 = stock_flow_timeseries_sc21.index
+recycling_rate_start_sc21 = 0.01
+recycling_rate_end_sc21 = 0.20
+
+inflow_target_sc21 = np.zeros(len(years_sc21))
+
+inflow_target_sc21[(years_sc21 >= 2022) & (years_sc21 <= 2023)] = np.linspace(recycling_rate_start_sc21, recycling_rate_end_sc21, np.sum((years_sc21 >= 2022) & (years_sc21 <= 2023)))
+
+extrapolation_years_sc21 = (years_sc21 >= 2023) & (years_sc21 <= 2030)
+extrapolation_values_sc21 = np.linspace(recycling_rate_start_sc21, recycling_rate_end_sc21, np.sum(extrapolation_years_sc21))
+inflow_target_sc21[extrapolation_years_sc21] = extrapolation_values_sc21
+inflow_target_sc21[years_sc21 >= 2031] = recycling_rate_end_sc21
+stock_flow_timeseries_sc21['inflow_target_sc21'] = inflow_target_sc21
+filtered_df_sc21 = stock_flow_timeseries_sc21[stock_flow_timeseries_sc21.index >= 2022]
+
+plt.plot(filtered_df_sc21.index, filtered_df_sc21['inflow_target_sc21'], label='Inflow Target', color='blue')
+
+def percent_formatter_sc21(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc21))
+plt.axhline(y=0.20, color='red', linestyle='--', label='20% target by 2045')
+plt.ylim(0, 1)
+plt.xlabel('Year')
+plt.ylabel('Rate')
+plt.title('Scenario 2.1: inflow targets')
+plt.show()
+
+# Secondary neodymium required to meet target inflow
+
+stock_flow_timeseries_sc21['sec_nd_sc21'] = stock_flow_timeseries_sc21['inflow_baseline'] * stock_flow_timeseries_sc21['inflow_target_sc21']
+
+filtered_df_sc21 = stock_flow_timeseries_sc21[(stock_flow_timeseries_sc21.index >= 2022) & (stock_flow_timeseries_sc21.index <= 2045)]
+
+filtered_df_sc21[['inflow_baseline', 'sec_nd_sc21']].plot.bar()
+plt.xticks(range(0, len(filtered_df_sc21.index), 10), filtered_df_sc21.index[::10], rotation='horizontal')
+plt.xlabel('Year')
+plt.ylabel('Neodymium (t/yr)')
+plt.title('Scenario 2.1: Secondary neodymium vs. neodymium inflow')
+
+new_labels_sc21 = {
+    'sec_nd_sc21': 'Secondary neodymium required (Scenario 2.1)',
+    'inflow_baseline': 'Neodymium inflow'
+}
+plt.legend(labels=new_labels_sc21.values())
+plt.show()
+
+# Comparison outflows vs. secondary neodymium requried
+
+filtered_df_sc21 = stock_flow_timeseries_sc21[(stock_flow_timeseries_sc21.index >= 2022) & (stock_flow_timeseries_sc21.index <= 2045)]
+
+filtered_df_sc21[['outflow_sc21', 'sec_nd_sc21']].plot.bar()
+plt.xticks(range(0, len(filtered_df_sc21.index), 10), filtered_df_sc21.index[::10], rotation='horizontal')
+plt.xlabel('Year')
+plt.ylabel('Neodymium (t/yr)')
+plt.title('Scenario 2.1: Secondary neodymium vs. neodymium inflow')
+
+new_labels_sc21 = {
+    'outflow_sc21': 'Neodymium outflow',
+    'sec_nd_sc21': 'Secondary neodymium required (Scenario 2.1)'
+}
+plt.legend(labels=new_labels_sc21.values())
+plt.show()
+
+# Calculation of outflow recycling rate required to achieve targets
+
+stock_flow_timeseries_sc21['outflow_rec_rate_sc21'] = stock_flow_timeseries_sc21['sec_nd_sc21'] / stock_flow_timeseries_sc21['outflow_sc21']
+
+filtered_df_sc21 = stock_flow_timeseries_sc21[stock_flow_timeseries_sc21.index >= 2022]
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc21))
+
+plt.axhline(y=1.0, color='red', linestyle='--')
+
+plt.plot(filtered_df_sc21.index, filtered_df_sc21['outflow_rec_rate_sc21'], label='Outflow Recycling Rate', color='blue')
+
+plt.title('Scenario 2.1: Outflow Recycling Rate')
+plt.xlabel('Year')
+plt.ylabel('Rate')
+
+plt.show()
+
+
+    
+#%% ### Scenario 2.2: Council's Proposal of 20% consumption to be satisfied from secondary material sources, increases until 100% reached
+
+import numpy as np
+import scipy.stats
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.interpolate import splrep, splev
+from matplotlib.ticker import FuncFormatter
+
+stock_flow_timeseries_baseline_sc22 = pd.read_excel('Calculations.xlsx', sheet_name='model_input', usecols=['year', 'inflow_baseline'])
+stock_flow_timeseries_baseline_sc22 = stock_flow_timeseries_baseline_sc22.set_index(['year'])
+
+time_max_sc22 = stock_flow_timeseries_baseline_sc22.shape[0]
+timesteps_sc22 = np.arange(0, time_max_sc22)
+
+curve_shape_baseline_sc22 = 4
+curve_scale_baseline_sc22 = 20
+curve_surv_baseline_sc22 = scipy.stats.weibull_min.sf(timesteps_sc22, curve_shape_baseline_sc22, 0, curve_scale_baseline_sc22)
+curve_surv_baseline_sc22 = pd.DataFrame(curve_surv_baseline_sc22, columns=['survival probability'])
+
+curve_surv_matrix_baseline_sc22 = pd.DataFrame(0, index=timesteps_sc22, columns=timesteps_sc22)
+for time_sc22 in timesteps_sc22:
+    curve_surv_matrix_baseline_sc22.loc[time_sc22:, time_sc22] = curve_surv_baseline_sc22['survival probability'].values[:time_max_sc22 - time_sc22]
+
+cohort_surv_matrix_baseline_sc22 = pd.DataFrame(0, index=timesteps_sc22, columns=timesteps_sc22)
+for time_sc22 in timesteps_sc22:
+    cohort_surv_matrix_baseline_sc22.loc[:, time_sc22] = curve_surv_matrix_baseline_sc22.loc[:, time_sc22] * stock_flow_timeseries_baseline_sc22['inflow_baseline'].iloc[time_sc22]
+cohort_surv_matrix_baseline_sc22.index = stock_flow_timeseries_baseline_sc22.index
+
+stock_flow_timeseries_baseline_sc22['stock_sc22'] = cohort_surv_matrix_baseline_sc22.sum(axis=1)
+stock_flow_timeseries_baseline_sc22['nas_sc22'] = np.diff(stock_flow_timeseries_baseline_sc22['stock_sc22'], prepend=0)
+stock_flow_timeseries_baseline_sc22['outflow_sc22'] = stock_flow_timeseries_baseline_sc22['inflow_baseline'] - stock_flow_timeseries_baseline_sc22['nas_sc22']
+
+stock_flow_timeseries_baseline_sc22 = stock_flow_timeseries_baseline_sc22 / 1000  # Conversion from kg to MT
+
+stock_flow_timeseries_sc22 = stock_flow_timeseries_baseline_sc22.copy()  # Renamed to sc_22
+
+years_sc22 = stock_flow_timeseries_sc22.index
+recycling_rate_start_sc22 = 0.01  
+recycling_rate_end_sc22 = 0.2  
+
+inflow_target_sc22 = np.zeros(len(years_sc22))  
+
+inflow_target_sc22[(years_sc22 >= 2022) & (years_sc22 <= 2023)] = np.linspace(recycling_rate_start_sc22, recycling_rate_end_sc22, np.sum((years_sc22 >= 2022) & (years_sc22 <= 2023)))
+
+extrapolation_years_sc22 = (years_sc22 >= 2023) & (years_sc22 <= 2030)
+extrapolation_values_sc22 = np.linspace(recycling_rate_start_sc22, recycling_rate_end_sc22, np.sum(extrapolation_years_sc22))
+inflow_target_sc22[extrapolation_years_sc22] = extrapolation_values_sc22
+
+extrapolation_years_2030_to_2045_sc22 = (years_sc22 >= 2031) & (years_sc22 <= 2045)
+
+known_years_sc22 = years_sc22[(years_sc22 >= 2022) & (years_sc22 <= 2030)]
+known_values_sc22 = inflow_target_sc22[(years_sc22 >= 2022) & (years_sc22 <= 2030)]
+
+coefficients_sc22 = np.polyfit(known_years_sc22, known_values_sc22, 1)
+extrapolated_values_2030_to_2045_sc22 = np.polyval(coefficients_sc22, years_sc22[extrapolation_years_2030_to_2045_sc22])
+
+inflow_target_sc22[extrapolation_years_2030_to_2045_sc22] = extrapolated_values_2030_to_2045_sc22
+stock_flow_timeseries_sc22['inflow_target_sc22'] = inflow_target_sc22
+
+filtered_df_sc22 = stock_flow_timeseries_sc22[stock_flow_timeseries_sc22.index >= 2022]
+
+plt.plot(filtered_df_sc22.index, filtered_df_sc22['inflow_target_sc22'], label='Inflow Target', color='blue')
+
+def percent_formatter_sc22(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc22))
+plt.axhline(y=0.2, color='red', linestyle='--')
+plt.ylim(0, 1.0)  # Adjust the y-axis limits if necessary
+plt.xlabel('Year')
+plt.ylabel('Rate')
+plt.title('Scenario 2.2: Inflow Targets')  # Renamed to Scenario 2.2
+plt.show()
+
+# Multiply inflow target by inflows to get sec nd required
+
+stock_flow_timeseries_sc22['sec_nd_sc22'] = stock_flow_timeseries_sc22['inflow_baseline'] * stock_flow_timeseries_sc22['inflow_target_sc22']
+
+filtered_df_sc22 = stock_flow_timeseries_sc22[(stock_flow_timeseries_sc22.index >= 2022) & (stock_flow_timeseries_sc22.index <= 2045)]
+
+filtered_df_sc22[['inflow_baseline', 'sec_nd_sc22']].plot.bar()
+plt.xticks(range(0, len(filtered_df_sc22.index), 10), filtered_df_sc22.index[::10], rotation='horizontal')
+plt.xlabel('Year')
+plt.ylabel('Neodymium (t/yr)')
+plt.title('Scenario 2.2: Secondary neodymium vs. neodymium inflow')  # Renamed to Scenario 2.2
+
+new_labels_sc22 = {
+    'sec_nd_sc22': 'Secondary neodymium required (Scenario 2.2)',
+    'inflow_baseline': 'Neodymium inflow'
+}
+plt.legend(labels=new_labels_sc22.values())
+plt.show()
+
+# Comparison outflows vs. sec nd
+
+filtered_df_sc22 = stock_flow_timeseries_sc22[(stock_flow_timeseries_sc22.index >= 2022) & (stock_flow_timeseries_sc22.index <= 2045)]
+
+filtered_df_sc22[['outflow_sc22', 'sec_nd_sc22']].plot.bar()
+plt.xticks(range(0, len(filtered_df_sc22.index), 10), filtered_df_sc22.index[::10], rotation='horizontal')
+plt.xlabel('Year')
+plt.ylabel('Neodymium (t/yr)')
+plt.title('Scenario 2.2: Secondary neodymium vs. neodymium outflow')  # Renamed to Scenario 2.2
+
+new_labels_sc22 = {
+    'outflow_sc22': 'Neodymium outflow',
+    'sec_nd_sc22': 'Secondary neodymium required (Scenario 2.2)'
+}
+plt.legend(labels=new_labels_sc22.values())
+plt.show()
+
+# Calculation of outflow rec rate required to achieve targets
+
+stock_flow_timeseries_sc22['outflow_rec_rate_sc22'] = stock_flow_timeseries_sc22['sec_nd_sc22'] / stock_flow_timeseries_sc22['outflow_sc22']
+
+filtered_df_sc22 = stock_flow_timeseries_sc22[stock_flow_timeseries_sc22.index >= 2022]
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc22))
+
+plt.axhline(y=1.0, color='red', linestyle='--')
+
+plt.plot(filtered_df_sc22.index, filtered_df_sc22['outflow_rec_rate_sc22'], label='Outflow Recycling Rate', color='blue')
+
+plt.title('Scenario 2.2: Outflow Recycling Rate')  # Renamed to Scenario 2.2
+
+plt.xlabel('Year')
+plt.ylabel('Rate')
+
+plt.show()
+
+
+
+#%% Combination of plots 2.1 and 2.2
+
+#plt.figure(figsize=(6, 3))
+plt.plot(filtered_df_sc21.index, filtered_df_sc21['inflow_target_sc21'], label='Scenario 2.1', color='dimgrey')
+plt.plot(filtered_df_sc22.index, filtered_df_sc22['inflow_target_sc22'], label='Scenario 2.2', color='lightgrey')
+
+def percent_formatter_sc21(x, pos):
+    return f'{x*100:.0f}%'
+
+def percent_formatter_sc22(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc21))
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc22))
+plt.scatter([2030], [0.20], color='red', marker='o', label='2030 Target')
+plt.ylim(0, 1.0)  # Adjust the y-axis limits if necessary
+
+plt.xlabel('Year')
+plt.ylabel('Rate')
+plt.legend()
+plt.show()
+
+fig, ax = plt.subplots(figsize=(12,6))
+filtered_df_sc21[['sec_nd_sc21']].plot.bar(ax=ax, color='lightcoral', width=0.4, position=1)
+filtered_df_sc22[['sec_nd_sc22', 'inflow_baseline']].plot.bar(ax=ax, color=['red', 'darkblue'], width=0.4)
+ax.set_xticks(range(0, len(filtered_df_sc21.index), 5))
+ax.set_xticklabels(filtered_df_sc21.index[::5], rotation='horizontal')
+plt.xlabel('Year')
+plt.ylabel('Neodymium (t/yr)')
+plt.legend(["Scenario 2.1","Scenario 2.2", "Inflow"])
+plt.show()
+
+
+fig, ax = plt.subplots(figsize=(12, 6))
+width = 0.2
+x = np.arange(len(filtered_df_sc11.index))
+
+ax.bar(x, filtered_df_sc21['sec_nd_sc21'], width, label='Scenario 2.1', color='lightcoral')
+ax.bar(x + width, filtered_df_sc22['sec_nd_sc22'], width, label='Scenario 2.2', color='red')
+ax.bar(x + 2 * width, filtered_df_sc21['outflow_sc21'], width, label='Outflow', color='orange')
+
+xticks_interval = 5
+ax.set_xticks(x[::xticks_interval] + width / 2)
+ax.set_xticklabels(filtered_df_sc11.index[::xticks_interval], rotation='horizontal')
+ax.set_xlabel('Year')
+ax.set_ylabel('Neodymium (t/yr)')
+
+plt.legend()
+plt.show()
+
+
+
+plt.plot(filtered_df_sc21.index, filtered_df_sc21['outflow_rec_rate_sc21'], label='Scenario 2.1', color='dimgrey')
+plt.plot(filtered_df_sc22.index, filtered_df_sc22['outflow_rec_rate_sc22'], label='Scenario 2.2', color='lightgrey')
+
+def percent_formatter_sc21(x, pos):
+    return f'{x*100:.0f}%'
+
+def percent_formatter_sc22(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc21))
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc22))
+plt.axhline(y=1.0, color='red', linestyle='--', label = "100% outflow recycling")
+plt.xlabel('Year')
+plt.ylabel('Rate')
+
+plt.legend()
+plt.show()
+
+
+#%% ### Scenario 3.1: Parliament's Proposal of 45% recycled outflows by 2030, outflow recycling rate continues remains at 45% ### 
+
+import numpy as np
+import scipy.stats
+import pandas as pd
+from os import chdir
+import matplotlib.pyplot as plt
+from scipy.interpolate import splrep, splev
+from matplotlib.ticker import FuncFormatter
+
+stock_flow_timeseries_baseline_sc31 = pd.read_excel('Calculations.xlsx', sheet_name='model_input', usecols=['year', 'inflow_baseline'])
+stock_flow_timeseries_baseline_sc31 = stock_flow_timeseries_baseline_sc31.set_index(['year'])
+
+time_max_sc31 = stock_flow_timeseries_baseline_sc31.shape[0]
+timesteps_sc31 = np.arange(0, time_max_sc31)
+
+curve_shape_baseline_sc31 = 4
+curve_scale_baseline_sc31 = 20
+curve_surv_baseline_sc31 = scipy.stats.weibull_min.sf(timesteps_sc31, curve_shape_baseline_sc31, 0, curve_scale_baseline_sc31)
+curve_surv_baseline_sc31 = pd.DataFrame(curve_surv_baseline_sc31, columns=['survival probability'])
+
+curve_surv_matrix_baseline_sc31 = pd.DataFrame(0, index=timesteps_sc31, columns=timesteps_sc31)
+for time_sc31 in timesteps_sc31:
+    curve_surv_matrix_baseline_sc31.loc[time_sc31:, time_sc31] = curve_surv_baseline_sc31['survival probability'].values[:time_max_sc31 - time_sc31]
+
+cohort_surv_matrix_baseline_sc31 = pd.DataFrame(0, index=timesteps_sc31, columns=timesteps_sc31)
+for time_sc31 in timesteps_sc31:
+    cohort_surv_matrix_baseline_sc31.loc[:, time_sc31] = curve_surv_matrix_baseline_sc31.loc[:, time_sc31] * stock_flow_timeseries_baseline_sc31['inflow_baseline'].iloc[time_sc31]
+cohort_surv_matrix_baseline_sc31.index = stock_flow_timeseries_baseline_sc31.index
+
+stock_flow_timeseries_baseline_sc31['stock_sc31'] = cohort_surv_matrix_baseline_sc31.sum(axis=1)
+stock_flow_timeseries_baseline_sc31['nas_sc31'] = np.diff(stock_flow_timeseries_baseline_sc31['stock_sc31'], prepend=0)
+stock_flow_timeseries_baseline_sc31['outflow_sc31'] = stock_flow_timeseries_baseline_sc31['inflow_baseline'] - stock_flow_timeseries_baseline_sc31['nas_sc31']
+
+stock_flow_timeseries_baseline_sc31 = stock_flow_timeseries_baseline_sc31 / 1000  # Conversion from kg to MT
+
+stock_flow_timeseries_sc31 = stock_flow_timeseries_baseline_sc31.copy()
+
+df_1_sc31 = stock_flow_timeseries_sc31[(stock_flow_timeseries_sc31.index >= 1989) & (stock_flow_timeseries_sc31.index <= 2023)]
+df_2_sc31 = stock_flow_timeseries_sc31[(stock_flow_timeseries_sc31.index >= 2024) & (stock_flow_timeseries_sc31.index <= 2030)]
+df_3_sc31 = stock_flow_timeseries_sc31[(stock_flow_timeseries_sc31.index >= 2031) & (stock_flow_timeseries_sc31.index <= 2045)]
+
+recycling_rate_Nd_1989_sc31 = 0
+recycling_rate_Nd_2023_sc31 = 0.01
+
+recycling_rate_Nd_timeseries_df_1_sc31 = np.interp(df_1_sc31.index, [1989, 2023], [recycling_rate_Nd_1989_sc31, recycling_rate_Nd_2023_sc31])
+
+recycling_rate_Nd_2024_sc31 = 0.01
+recycling_rate_Nd_2030_sc31 = 0.45
+
+recycling_rate_Nd_timeseries_df_2_sc31 = np.interp(df_2_sc31.index, [2024, 2030], [recycling_rate_Nd_2024_sc31, recycling_rate_Nd_2030_sc31])
+
+extrapolated_years_sc31 = np.arange(2031, 2046)
+recycling_rate_Nd_timeseries_df_3_sc31 = np.full(len(extrapolated_years_sc31), 0.45)
+
+recycling_rate_Nd_timeseries_df_3_sc31 = pd.Series(recycling_rate_Nd_timeseries_df_3_sc31, index=extrapolated_years_sc31)
+
+combined_array_sc31 = np.concatenate([recycling_rate_Nd_timeseries_df_1_sc31, recycling_rate_Nd_timeseries_df_2_sc31, recycling_rate_Nd_timeseries_df_3_sc31])
+recycling_rates_sc31 = pd.DataFrame(combined_array_sc31, columns=['rate_sc31'])
+recycling_rates_sc31.index = stock_flow_timeseries_sc31.index
+
+recycling_rates_sc31["rate_sc31"].plot(label="outflow recycling rate 2030-2045", color='blue')
+recycling_rates_sc31["rate_sc31"].loc[1989:2030].plot(label="outflow recycling rate 2023-2030", color='blue')
+recycling_rates_sc31["rate_sc31"].loc[1989:2023].plot(label="outflow recycling rate 1989-2023", color='blue')
+
+def percent_formatter_sc31(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc31))
+
+plt.axhline(y=1.0, color='red', linestyle='--', label='45% target by 2045')
+
+plt.ylim(0, 1)
+
+plt.xlabel('Year')
+plt.ylabel('Rate')
+plt.title('Scenario 3.1: outflow recycling rate')
+plt.show()
+
+recycling_rates_1d_sc31 = recycling_rates_sc31.values.flatten()  # conversion of recycling rates into array
+
+# Plotting inflows, outflows + secondary neodymium
+
+stock_flow_timeseries_sc31['sec_nd_sc31'] = stock_flow_timeseries_sc31['outflow_sc31'] * recycling_rates_1d_sc31
+
+stock_flow_timeseries_sc31['circular_use_sc31'] = stock_flow_timeseries_sc31['sec_nd_sc31'] / stock_flow_timeseries_sc31['inflow_baseline']
+stock_flow_timeseries_sc31['circular_use_sc31'] = stock_flow_timeseries_sc31['circular_use_sc31'].fillna(0)
+
+plt.plot(stock_flow_timeseries_baseline_sc31.index, stock_flow_timeseries_baseline_sc31['inflow_baseline'], label='inflow')
+plt.plot(stock_flow_timeseries_baseline_sc31.index, stock_flow_timeseries_baseline_sc31['outflow_sc31'], label='outflow')
+plt.plot(stock_flow_timeseries_sc31.index, stock_flow_timeseries_sc31['sec_nd_sc31'], label='secondary neodymium')
+
+plt.xlabel('Year')
+plt.ylabel('Neodymium (t/yr)')
+plt.title('Scenario 3.1')
+plt.legend()
+plt.show()
+
+# Secondary neodymium and inflows 2022 - 2045
+
+filtered_df_sc31 = stock_flow_timeseries_sc31[(stock_flow_timeseries_sc31.index >= 2022) & (stock_flow_timeseries_sc31.index <= 2045)]
+
+filtered_df_sc31[['sec_nd_sc31', 'inflow_baseline']].plot.bar()
+plt.xticks(range(0, len(filtered_df_sc31.index), 10), filtered_df_sc31.index[::10], rotation='horizontal')
+plt.xlabel('Year')
+plt.ylabel('Neodymium (t/yr)')
+plt.title('Scenario 3.1: Secondary neodymium vs. neodymium inflow')
+
+new_labels_sc31 = {
+    'sec_nd_sc31': 'Secondary neodymium_sc31',
+    'inflow_baseline': 'Neodymium inflow_sc31'
+}
+plt.legend(labels=new_labels_sc31.values())
+plt.show()
+
+# CMU 2022 - 2045
+
+filtered_df_sc31['circular_use_sc31'].plot()
+
+def percent_formatter_sc31(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc31))
+
+plt.axhline(y=0.45, color='red', linestyle='--', label='45% target by 2045')
+
+plt.xlabel('Year')
+plt.ylabel('Circular material use rate')
+plt.title('Circular material use rate Scenario 3.1')
+plt.show()
+
+
+
+#%% ### Scenario 3.2: Parliament's Proposal of 45% recycled outflows by 2030, outflow recycling rate continues increasing to 100% ###
+
+import numpy as np
+import scipy.stats
+import pandas as pd
+from os import chdir
+import matplotlib.pyplot as plt
+from scipy.interpolate import splrep, splev
+from matplotlib.ticker import FuncFormatter
+
+sc_32_stock_flow_timeseries_baseline = pd.read_excel('Calculations.xlsx', sheet_name='model_input', usecols=['year', 'inflow_baseline'])
+sc_32_stock_flow_timeseries_baseline = sc_32_stock_flow_timeseries_baseline.set_index(['year'])
+
+time_max = sc_32_stock_flow_timeseries_baseline.shape[0]
+timesteps = np.arange(0, time_max)
+curve_shape_baseline = 4
+curve_scale_baseline = 20
+curve_surv_baseline = scipy.stats.weibull_min.sf(timesteps, curve_shape_baseline, 0, curve_scale_baseline)
+curve_surv_baseline = pd.DataFrame(curve_surv_baseline, columns=['survival probability'])
+
+curve_surv_matrix_baseline = pd.DataFrame(0, index=timesteps, columns=timesteps)
+for time in timesteps:
+    curve_surv_matrix_baseline.loc[time:, time] = curve_surv_baseline['survival probability'].values[:time_max - time]
+
+cohort_surv_matrix_baseline = pd.DataFrame(0, index=timesteps, columns=timesteps)
+for time in timesteps:
+    cohort_surv_matrix_baseline.loc[:, time] = curve_surv_matrix_baseline.loc[:, time] * sc_32_stock_flow_timeseries_baseline['inflow_baseline'].iloc[time]
+cohort_surv_matrix_baseline.index = sc_32_stock_flow_timeseries_baseline.index
+
+sc_32_stock_flow_timeseries_baseline['stock_sc_32'] = cohort_surv_matrix_baseline.sum(axis=1)
+sc_32_stock_flow_timeseries_baseline['nas_sc_32'] = np.diff(sc_32_stock_flow_timeseries_baseline['stock_sc_32'], prepend=0) 
+sc_32_stock_flow_timeseries_baseline['outflow_sc_32'] = sc_32_stock_flow_timeseries_baseline['inflow_baseline'] - sc_32_stock_flow_timeseries_baseline['nas_sc_32']
+
+sc_32_stock_flow_timeseries_baseline = sc_32_stock_flow_timeseries_baseline / 1000 #conversion from kg to MT
+
+sc_32_stock_flow_timeseries = sc_32_stock_flow_timeseries_baseline.copy()
+
+df_1_sc_32 = sc_32_stock_flow_timeseries[(sc_32_stock_flow_timeseries.index >= 1989) & (sc_32_stock_flow_timeseries.index <= 2023)]
+df_2_sc_32 = sc_32_stock_flow_timeseries[(sc_32_stock_flow_timeseries.index >= 2024) & (sc_32_stock_flow_timeseries.index <= 2030)]
+df_3_sc_32 = sc_32_stock_flow_timeseries[(sc_32_stock_flow_timeseries.index >= 2031) & (sc_32_stock_flow_timeseries.index <= 2045)]
+
+recycling_rate_Nd_1989_sc_32 = 0
+recycling_rate_Nd_2023_sc_32 = 0.01
+
+recycling_rate_Nd_timeseries_df_1_sc_32 = np.interp(df_1_sc_32.index, [1989, 2023], [recycling_rate_Nd_1989_sc_32, recycling_rate_Nd_2023_sc_32])
+recycling_rate_Nd_timeseries_df_1_sc_32[recycling_rate_Nd_timeseries_df_1_sc_32 > 1.0] = 1.0
+
+recycling_rate_Nd_2024_sc_32 = 0.01
+recycling_rate_Nd_2030_sc_32 = 0.45
+
+recycling_rate_Nd_timeseries_df_2_sc_32 = np.interp(df_2_sc_32.index, [2024, 2030], [recycling_rate_Nd_2024_sc_32, recycling_rate_Nd_2030_sc_32])
+recycling_rate_Nd_timeseries_df_2_sc_32[recycling_rate_Nd_timeseries_df_2_sc_32 > 1.0] = 1.0
+
+x_sc_32 = df_2_sc_32.index.values
+y_sc_32 = recycling_rate_Nd_timeseries_df_2_sc_32
+
+coefficients_sc_32 = np.polyfit(x_sc_32, y_sc_32, 1)
+slope_sc_32 = coefficients_sc_32[0]
+intercept_sc_32 = coefficients_sc_32[1]
+
+extrapolated_years_sc_32 = np.arange(2031, 2046)
+recycling_rate_Nd_timeseries_df_3_sc_32 = slope_sc_32 * extrapolated_years_sc_32 + intercept_sc_32
+recycling_rate_Nd_timeseries_df_3_sc_32[recycling_rate_Nd_timeseries_df_3_sc_32 > 1.0] = 1.0
+
+combined_array_sc_32 = np.concatenate([recycling_rate_Nd_timeseries_df_1_sc_32, recycling_rate_Nd_timeseries_df_2_sc_32, recycling_rate_Nd_timeseries_df_3_sc_32])
+recycling_rates_sc_32 = pd.DataFrame(combined_array_sc_32, columns=['rate'])
+recycling_rates_sc_32.index = sc_32_stock_flow_timeseries.index
+
+recycling_rates_sc_32["rate"].plot(label="outflow recycling rate 2023-2030", color = 'blue')
+recycling_rates_sc_32["rate"].loc[1989:2030].plot(label = "rate ", color = 'blue')
+recycling_rates_sc_32["rate"].loc[1989:2023].plot(label="historic and current recycling rate", color = 'blue')
+
+def percent_formatter_sc_32(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc_32))
+
+plt.axhline(y=0.45, color='red', linestyle='--', label='45% target by 2045')
+
+plt.xlabel('Year')
+plt.ylabel('Rate')
+plt.title('Scenario 3.2: outflow recycling rate')
+plt.show()
+
+recycling_rates_1d_sc_32 = recycling_rates_sc_32.values.flatten()
+sc_32_stock_flow_timeseries['recycling_sc_32'] = sc_32_stock_flow_timeseries['outflow_sc_32'] * recycling_rates_1d_sc_32
+
+# Plotting inflows, outflows + secondary neodymium
+
+sc_32_stock_flow_timeseries['sec_nd_sc_32'] = sc_32_stock_flow_timeseries['outflow_sc_32'] * recycling_rates_1d_sc_32
+
+sc_32_stock_flow_timeseries['circular_use_sc_32'] = sc_32_stock_flow_timeseries['sec_nd_sc_32'] / sc_32_stock_flow_timeseries['inflow_baseline']
+sc_32_stock_flow_timeseries['circular_use_sc_32'] = sc_32_stock_flow_timeseries['circular_use_sc_32'].fillna(0)
+
+plt.plot(sc_32_stock_flow_timeseries_baseline.index, sc_32_stock_flow_timeseries_baseline['inflow_baseline'], label = 'inflow')
+plt.plot(sc_32_stock_flow_timeseries_baseline.index, sc_32_stock_flow_timeseries_baseline['outflow_sc_32'], label = 'outflow')
+plt.plot(sc_32_stock_flow_timeseries.index, sc_32_stock_flow_timeseries['sec_nd_sc_32'], label = 'secondary neodymium')
+
+plt.xlabel('Year')
+plt.ylabel('Neodymium (t/yr)')
+plt.title('Scenario 3.2')
+plt.legend()
+plt.show()
+
+# Secondary neodymium and inflows 2022 - 2045
+
+filtered_df_sc_32 = sc_32_stock_flow_timeseries[(sc_32_stock_flow_timeseries.index >= 2022) & (sc_32_stock_flow_timeseries.index <= 2045)]
+
+filtered_df_sc_32[['sec_nd_sc_32', 'inflow_baseline']].plot.bar()
+plt.xticks(range(0, len(filtered_df_sc_32.index), 10), filtered_df_sc_32.index[::10], rotation='horizontal')
+plt.xlabel('Year')
+plt.ylabel('Neodymium (t/yr)')
+plt.title('Scenario 3.2: Secondary neodymium vs. neodymium inflow')
+
+new_labels_sc_32 = {
+    'sec_nd_sc_32': 'Secondary neodymium',
+    'inflow_baseline': 'Neodymium inflow'
+}
+plt.legend(labels=new_labels_sc_32.values())
+plt.show()
+
+# CMU 2022 - 2045
+
+filtered_df_sc_32['circular_use_sc_32'].plot()
+
+def percent_formatter_sc_32(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc_32))
+
+plt.axhline(y=0.45, color='red', linestyle='--', label='45% target by 2045')
+
+plt.xlabel('Year')
+plt.ylabel('Circular material use rate')
+plt.title('Circular material use rate Scenario 3.2')
+plt.show()
+
+
+#%% Combination of plots 3.1 and 3.2
+
+
+#fig, ax = plt.subplots(figsize=(6,3))
+recycling_rates_sc31["rate_sc31"].loc[2023:2045].plot(label="Scenario 3.1", color='dimgrey')
+recycling_rates_sc_32["rate"].loc[2023:2045].plot(label = "Scenario 3.2", color = 'lightgrey')
+
+def percent_formatter_sc31(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc31))
+
+plt.scatter([2030], [0.45], color='red', marker='o', label='2030 Target')
+plt.ylim(0, 1.1)
+plt.xlabel('Year')
+plt.ylabel('Rate')
+plt.legend()
+plt.show()
+
+
+
+
+filtered_df_sc31 = stock_flow_timeseries_baseline_sc31.loc['2022':'2045']
+filtered_df_ROP_sc31 = stock_flow_timeseries_sc31.loc['2022':'2045']
+filtered_df_sc_32 = sc_32_stock_flow_timeseries.loc['2022':'2045']
+fig, ax = plt.subplots(figsize=(12, 6))
+bar_width = 0.2
+
+x_positions = np.arange(len(filtered_df_sc31.index))
+plt.bar(x_positions - bar_width, filtered_df_ROP_sc31['sec_nd_sc31'], width=bar_width, label='Scenario 3.1', color='lightcoral')
+plt.bar(x_positions, filtered_df_sc_32['sec_nd_sc_32'], width=bar_width, label='Scenario 3.2', color='red')
+plt.bar(x_positions + bar_width, filtered_df_sc31['outflow_sc31'], width=bar_width, label='Outflow', color='orange')
+
+plt.xlabel('Year')
+plt.xticks(x_positions[::5], filtered_df_sc31.index[::5])  # Display x-ticks every 10 years
+plt.ylabel('Neodymium (t/yr)')
+plt.legend()
+plt.show()
+
+
+
+
+filtered_df_sc31 = stock_flow_timeseries_baseline_sc31.loc['2022':'2045']
+filtered_df_ROP_sc31 = stock_flow_timeseries_sc31.loc['2022':'2045']
+filtered_df_sc_32 = sc_32_stock_flow_timeseries.loc['2022':'2045']
+fig, ax = plt.subplots(figsize=(12, 6))
+bar_width = 0.2
+
+x_positions = np.arange(len(filtered_df_sc31.index))
+plt.bar(x_positions - bar_width, filtered_df_ROP_sc31['sec_nd_sc31'], width=bar_width, label='Scenario 3.1', color='lightcoral')
+plt.bar(x_positions, filtered_df_sc_32['sec_nd_sc_32'], width=bar_width, label='Scenario 3.2', color='red')
+plt.bar(x_positions + bar_width, filtered_df_sc31['inflow_baseline'], width=bar_width, label='Inflow', color='darkblue')
+
+plt.xlabel('Year')
+plt.xticks(x_positions[::5], filtered_df_sc31.index[::5])  # Display x-ticks every 10 years
+plt.ylabel('Neodymium (t/yr)')
+plt.legend()
+plt.show()
+
+
+
+
+filtered_df_ROP_sc31['circular_use_sc31'].plot(label= 'Scenario 3.1', color = 'dimgrey')
+filtered_df_sc_32['circular_use_sc_32'].plot(label= 'Scenario 3.2', color = 'lightgrey')
+def percent_formatter_sc31(x, pos):
+    return f'{x*100:.0f}%'
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter_sc31))
+plt.axhline(y=1.0, color='red', linestyle='--', label = 'CMU of 100%')
+
+plt.xlabel('Year')
+plt.ylabel('Rate')
+
+plt.legend()
+plt.show()
+
+
+
+
+
+#%% Combined Results
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# Comparison secondary neodymium across scenarios
+data = {"Sub-scenarios 1": [974, 1291, 1808],
+    "Sub-scenarios 2": [1455, 1944, 2490],
+    "Scenario": ["Scenario 1", "Scenario 2", "Scenario 3"]}
+
+df = pd.DataFrame(data)
+df.set_index("Scenario", inplace=True)
+
+ax = df.plot(kind='bar', rot=0, color=['lightcoral', 'red'])
+plt.xlabel('Scenario')
+plt.ylabel('Secondary neodymium (t)')
+
+for p in ax.patches:
+    ax.annotate(str(p.get_height()), (p.get_x() + p.get_width() / 2., p.get_height()),
+                ha='center', va='center', fontsize=8, color='black', xytext=(0, 10),
+                textcoords='offset points')
+ax.set_ylim(0, 3000)
+ax.legend(loc='upper left')
+plt.show()
+
+# Comparison secondary neodymium satisfying demand across scenarios
+
+data_percent = {
+    "Values": [0.11, 0.17, 0.15, 0.22, 0.21, 0.29],
+    "Scenario": ["Scenario 1.1", "Scenario 1.2", "Scenario 2.1", "Scenario 2.2", "Scenario 3.1", "Scenario 3.2"]
+}
+
+df_percent = pd.DataFrame(data_percent)
+
+# Create a separate pie chart for each value
+for index, row in df_percent.iterrows():
+    value = row['Values']
+    category = row['Scenario']
+    
+    # Convert the value to a percentage without decimal places
+    percentage = int(value * 100)
+    
+    # Determine the color based on the scenario
+    color = 'red' if category.endswith('2') else 'lightcoral'
+    
+    # Create a pie chart with the scenario name as the title and specified color
+    plt.figure(figsize=(6, 6))  # Adjust the figure size as needed
+    plt.pie([percentage, 100 - percentage], labels=[f'{percentage}%', ''], colors=[color, 'lightgrey'],
+            autopct='', startangle=140)
+    plt.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+    
+    plt.title(category)  # Use the scenario name as the title
+    plt.show()
+
+
+# Comparison inflows with secondary neodymium across scenarios
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+data2030 = {
+    "Sub-scenarios 1": [69.687, 92.916, 35.6227],
+    "Sub-scenarios 2": [69.687, 92.916, 35.6227],
+    "Scenario": ["Scenario 1", "Scenario 2", "Scenario 3"]
+}
+
+colors = ['lightcoral', 'red']
+
+fig, ax = plt.subplots(figsize=(8, 6))
+bar_width = 0.4
+num_sub_scenarios = len(data2030) - 1
+
+# Create bars for each sub-scenario
+for i, sub_scenario in enumerate(data2030.keys()):
+    if sub_scenario != "Scenario":
+        x_positions = np.arange(len(data2030[sub_scenario]))
+        bar_heights = data2030[sub_scenario]
+        color = colors[i % num_sub_scenarios]  # Alternate colors
+
+        ax.bar(
+            x_positions + (i * bar_width / num_sub_scenarios),
+            bar_heights,
+            width=bar_width / num_sub_scenarios,
+            label=sub_scenario,
+            color=color
+        )
+
+
+adjusted_x_positions = np.arange(len(data2030["Scenario"])) + (bar_width / 4)
+
+ax.set_xticks(adjusted_x_positions)
+ax.set_xticklabels(data2030["Scenario"])
+plt.ylim(0,120)
+plt.ylabel('Secondary neodymium (t)')
+plt.xlabel('Scenario')
+ax.legend(loc='upper left')
+plt.show()
+
+
+filtered_df = stock_flow_timeseries_sc11.loc[2023:2045]
+total_inflow = filtered_df['inflow_baseline'].sum()
+print("Total Inflow Baseline (2023-2045):", total_inflow)
+
+
+filtered_df = stock_flow_timeseries_sc11.loc[2031:2045]
+total_inflow = filtered_df['inflow_baseline'].sum()
+print("Total Inflow Baseline (2031-2045):", total_inflow)
+
+
+filtered_df = stock_flow_timeseries_sc11.loc[2023:2030]
+total_inflow = filtered_df['inflow_baseline'].sum()
+print("Total Inflow Baseline (2023-2030):", total_inflow)
+
+
+filtered_df = stock_flow_timeseries_sc11.loc[2023:2030]
+total_inflow = filtered_df['sec_nd_sc11'].sum()
+print("Total Sec Nd 1.1 (2023-2030):", total_inflow)
+
+filtered_df = stock_flow_timeseries_sc11.loc[2031:2045]
+total_inflow = filtered_df['sec_nd_sc11'].sum()
+print("Total Sec Nd 1.1 (2031-2045):", total_inflow)
+
+
+
+filtered_df = stock_flow_timeseries_sc12.loc[2023:2030]
+total_inflow = filtered_df['sec_nd_sc12'].sum()
+print("Total Sec Nd 1.2 (2023-2030):", total_inflow)
+
+filtered_df = stock_flow_timeseries_sc12.loc[2031:2045]
+total_inflow = filtered_df['sec_nd_sc12'].sum()
+print("Total Sec Nd 1.2 (2031-2045):", total_inflow)
+
+
+filtered_df = stock_flow_timeseries_sc21.loc[2023:2030]
+total_inflow = filtered_df['sec_nd_sc21'].sum()
+print("Total Sec Nd 2.1 (2023-2030):", total_inflow)
+
+filtered_df = stock_flow_timeseries_sc21.loc[2031:2045]
+total_inflow = filtered_df['sec_nd_sc21'].sum()
+print("Total Sec Nd 2.1 (2031-2045):", total_inflow)
+
+
+filtered_df = stock_flow_timeseries_sc22.loc[2023:2030]
+total_inflow = filtered_df['sec_nd_sc22'].sum()
+print("Total Sec Nd 2.2 (2023-2030):", total_inflow)
+
+filtered_df = stock_flow_timeseries_sc22.loc[2031:2045]
+total_inflow = filtered_df['sec_nd_sc22'].sum()
+print("Total Sec Nd 2.2 (2031-2045):", total_inflow)
+
+
+filtered_df = stock_flow_timeseries_sc31.loc[2023:2030]
+total_inflow = filtered_df['sec_nd_sc31'].sum()
+print("Total Sec Nd 3.1 (2023-2030):", total_inflow)
+
+filtered_df = stock_flow_timeseries_sc31.loc[2031:2045]
+total_inflow = filtered_df['sec_nd_sc31'].sum()
+print("Total Sec Nd 3.1 (2031-2045):", total_inflow)
+
+
+filtered_df = sc_32_stock_flow_timeseries.loc[2023:2030]
+total_inflow = filtered_df['sec_nd_sc_32'].sum()
+print("Total Sec Nd 3.2 (2023-2030):", total_inflow)
+
+filtered_df = sc_32_stock_flow_timeseries.loc[2031:2045]
+total_inflow = filtered_df['sec_nd_sc_32'].sum()
+print("Total Sec Nd 3.2 (2031-2045):", total_inflow)
+
+
+filtered_df = stock_flow_timeseries_sc11.loc[2023:2045]
+total_inflow = filtered_df['inflow_baseline'].sum()
+print("Total Inflow Baseline (2023-2045):", total_inflow)
+
+
+filtered_df = stock_flow_timeseries_sc11.loc[2023:2037]
+total_inflow = filtered_df['inflow_baseline'].sum()
+print("Total Inflow Baseline (2023-2037):", total_inflow)
+
+filtered_df = stock_flow_timeseries_sc11.loc[2038:2045]
+total_inflow = filtered_df['inflow_baseline'].sum()
+print("Total Inflow Baseline (2038-2045):", total_inflow)
+
+filtered_df = sc_32_stock_flow_timeseries.loc[2023:2037]
+total_inflow = filtered_df['sec_nd_sc_32'].sum()
+print("Total Sec Nd 3.2 (2023-2037):", total_inflow)
+
+
+filtered_df = stock_flow_timeseries_baseline.loc[2023:2029]
+total_outflow = filtered_df['outflow'].sum()
+print("Total outflow 2023-2029:", total_outflow)
+
+filtered_df = stock_flow_timeseries_sc11.loc[2030:2045]
+total_inflow = filtered_df['sec_nd_sc11'].sum()
+print("Sec Nd (2030-2045):", total_inflow)
+
+filtered_df = stock_flow_timeseries_sc12.loc[2030:2045]
+total_inflow = filtered_df['sec_nd_sc12'].sum()
+print("Sec Nd (2030-2045):", total_inflow)
+
+
+filtered_df = stock_flow_timeseries_baseline.loc[2023:2031]
+total_outflow = filtered_df['outflow'].sum()
+print("Total outflow 2023-2031:", total_outflow)
+
+filtered_df = stock_flow_timeseries_baseline.loc[2023:2033]
+total_outflow = filtered_df['outflow'].sum()
+print("Total outflow 2023-2033:", total_outflow)
+
+
+filtered_df = stock_flow_timeseries_sc21.loc[2032:2045]
+total_inflow = filtered_df['sec_nd_sc21'].sum()
+print("Sec Nd (2032-2045):", total_inflow)
+
+filtered_df = stock_flow_timeseries_sc22.loc[2033:2045]
+total_inflow = filtered_df['sec_nd_sc22'].sum()
+print("Sec Nd (2033-2045):", total_inflow)
+
+# For outflows not smaller than secondary inflows
+
+data = {"Sub-scenarios 1": [950, 1166, 1808],
+    "Sub-scenarios 2": [1431, 1931, 2490],
+    "Scenario": ["Scenario 1", "Scenario 2", "Scenario 3"]}
+
+df = pd.DataFrame(data)
+df.set_index("Scenario", inplace=True)
+
+ax = df.plot(kind='bar', rot=0, color=['lightcoral', 'red'])
+plt.xlabel('Scenario')
+plt.ylabel('Secondary neodymium (t)')
+
+for p in ax.patches:
+    ax.annotate(str(p.get_height()), (p.get_x() + p.get_width() / 2., p.get_height()),
+                ha='center', va='center', fontsize=8, color='black', xytext=(0, 10),
+                textcoords='offset points')
+ax.set_ylim(0, 3000)
+ax.legend(loc='upper left')
+plt.show()
+
+data_percent = {
+    "Values": [0.11, 0.16, 0.13, 0.22, 0.21, 0.29],
+    "Scenario": ["Scenario 1.1", "Scenario 1.2", "Scenario 2.1", "Scenario 2.2", "Scenario 3.1", "Scenario 3.2"]
+}
+
+df_percent = pd.DataFrame(data_percent)
+
+# Create a separate pie chart for each value for outflows not smaller than secondary inflows
+for index, row in df_percent.iterrows():
+    value = row['Values']
+    category = row['Scenario']
+    
+    # Convert the value to a percentage without decimal places
+    percentage = int(value * 100)
+    
+    # Determine the color based on the scenario
+    color = 'red' if category.endswith('2') else 'lightcoral'
+    
+    # Create a pie chart with the scenario name as the title and specified color
+    plt.figure(figsize=(6, 6))  # Adjust the figure size as needed
+    plt.pie([percentage, 100 - percentage], labels=[f'{percentage}%', ''], colors=[color, 'lightgrey'],
+            autopct='', startangle=140)
+    plt.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+    
+    plt.title(category)  # Use the scenario name as the title
+    plt.show()
+
+
+
+# Recycling rate
+
+fig, ax = plt.subplots(figsize=(8, 4))
+gray = 'gray'
+
+# Plot Scenario 1 with different shades
+plt.plot(filtered_df_sc11.index, filtered_df_sc11['outflow_rec_rate_sc11'], label='Scenario 1.1', color=gray, linestyle='--')
+plt.plot(filtered_df_sc12.index, filtered_df_sc12['outflow_rec_rate_sc12'], label='Scenario 1.2', color=gray, alpha=0.9)
+
+# Plot Scenario 2 with different shades
+plt.plot(filtered_df_sc21.index, filtered_df_sc21['outflow_rec_rate_sc21'], label='Scenario 2.1', color=gray, alpha=0.7, linestyle='--')
+plt.plot(filtered_df_sc22.index, filtered_df_sc22['outflow_rec_rate_sc22'], label='Scenario 2.2', color=gray, alpha=0.6)
+
+
+filtered_df_sc31_rates = recycling_rates_sc31.loc['2023':'2045']
+filtered_df_sc32_rates = recycling_rates_sc_32.loc['2023':'2045']
+
+# Plot Scenario 3 with different shades
+
+plt.plot(filtered_df_sc31_rates.index, filtered_df_sc31_rates['rate_sc31'], label='Scenario 3.1', color=gray, alpha=0.4, linestyle='--')
+plt.plot(filtered_df_sc32_rates.index, filtered_df_sc32_rates['rate'], label='Scenario 3.2', color=gray, alpha=0.3)
+
+
+def percent_formatter(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter))
+
+plt.axhline(y=1.0, color='red', linestyle='--', label="100% recycling rate")
+plt.scatter([2030], [0.45], color='red', marker='o', label='2030 Target Scenario 3')
+
+plt.xlabel('Year')
+plt.ylabel('Rate')
+plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+plt.tight_layout()
+plt.show()
+
+
+
+
+fig, ax = plt.subplots(figsize=(8, 4))
+gray = 'gray'
+
+# Plot Scenario 1 with different shades
+plt.plot(filtered_df_sc11.index, filtered_df_sc11['inflow_target_sc11'], label='Scenario 1.1', color=gray, linestyle='--')
+plt.plot(filtered_df_sc12.index, filtered_df_sc12['inflow_target_sc12'], label='Scenario 1.2', color=gray, alpha=0.9)
+
+# Plot Scenario 2 with different shades
+plt.plot(filtered_df_sc21.index, filtered_df_sc21['inflow_target_sc21'], label='Scenario 2.1', color=gray, alpha=0.7, linestyle='--')
+plt.plot(filtered_df_sc22.index, filtered_df_sc22['inflow_target_sc22'], label='Scenario 2.2', color=gray, alpha=0.6)
+
+
+filtered_df_sc31_CMU = stock_flow_timeseries_sc31.loc['2023':'2045']
+filtered_df_sc31_CMU.loc['2045':, 'circular_use_sc31'] = 1
+filtered_df_sc32_CMU = sc_32_stock_flow_timeseries.loc['2023':'2045']
+filtered_df_sc32_CMU.loc['2038':, 'circular_use_sc_32'] = 1
+
+
+# Plot Scenario 3 with different shades
+
+plt.plot(filtered_df_sc31_CMU.index, filtered_df_sc31_CMU['circular_use_sc31'], label='Scenario 3.1', color=gray, alpha=0.4, linestyle='--')
+plt.plot(filtered_df_sc32_CMU.index, filtered_df_sc32_CMU['circular_use_sc_32'], label='Scenario 3.2', color=gray, alpha=0.3)
+
+
+def percent_formatter(x, pos):
+    return f'{x*100:.0f}%'
+
+plt.gca().yaxis.set_major_formatter(FuncFormatter(percent_formatter))
+
+plt.scatter([2030], [0.15], color='red', marker='o', label='2030 Target Scenario 1')
+plt.scatter([2030], [0.20], color='lightcoral', marker='o', label='2030 Target Scenario 2')
+plt.xlabel('Year')
+plt.ylabel('Rate')
+
+
+# Move the legend outside to the right
+plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+
+plt.tight_layout()
+plt.show()
+
+
+#%% ### Baseline Sensitivity Analysis ###
+
+import numpy as np
+import scipy.stats
+import pandas as pd
+from os import chdir
+import matplotlib.pyplot as plt
+
+plt.plot(stock_flow_timeseries_baseline.index, stock_flow_timeseries_baseline['inflow_baseline'], label = 'inflow', color = 'blue')
+plt.plot(stock_flow_timeseries_baseline.index, stock_flow_timeseries_baseline['outflow'], label = 'outflow', color = 'orange')
+
+curve_shape_baseline = 4
+curve_scale_baseline = 20
+
+# - 10% sd survival curve
+
+stock_flow_timeseries_shape_minus_10 = pd.read_excel('Calculations.xlsx', sheet_name='model_input', usecols=['year', 'inflow_baseline'])
+stock_flow_timeseries_shape_minus_10 = stock_flow_timeseries_shape_minus_10.set_index(['year'])
+
+curve_shape_minus_10 = curve_shape_baseline * 0.9
+
+timesteps = np.arange(0, stock_flow_timeseries_shape_minus_10.shape[0])
+time_max = stock_flow_timeseries_shape_minus_10.shape[0]
+
+curve_surv_shape_minus_10 = scipy.stats.weibull_min.sf(timesteps, curve_shape_minus_10, 0, curve_scale_baseline)
+curve_surv_shape_minus_10 = pd.DataFrame(curve_surv_shape_minus_10, columns=['survival probability'])
+
+curve_surv_matrix_shape_minus_10 = pd.DataFrame(0, index=timesteps, columns=timesteps)
+for time in timesteps:
+    curve_surv_matrix_shape_minus_10.loc[time:, time] = curve_surv_shape_minus_10['survival probability'].values[:time_max - time]
+
+cohort_surv_matrix_shape_minus_10 = pd.DataFrame(0, index=timesteps, columns=timesteps)
+for time in timesteps:
+    cohort_surv_matrix_shape_minus_10.loc[:, time] = curve_surv_matrix_shape_minus_10.loc[:, time] * stock_flow_timeseries_shape_minus_10['inflow_baseline'].iloc[time]
+cohort_surv_matrix_shape_minus_10.index = stock_flow_timeseries_shape_minus_10.index
+
+stock_flow_timeseries_shape_minus_10['stock'] = cohort_surv_matrix_shape_minus_10.sum(axis=1)
+stock_flow_timeseries_shape_minus_10['nas'] = np.diff(stock_flow_timeseries_shape_minus_10['stock'], prepend=0) 
+stock_flow_timeseries_shape_minus_10['outflow'] = stock_flow_timeseries_shape_minus_10['inflow_baseline'] - stock_flow_timeseries_shape_minus_10['nas']
+
+stock_flow_timeseries_shape_minus_10 = stock_flow_timeseries_shape_minus_10 / 1000 #conversion from kg to MT
+
+# + 10% sd survival curve
+
+stock_flow_timeseries_shape_plus_10 = pd.read_excel('Calculations.xlsx', sheet_name='model_input', usecols=['year', 'inflow_baseline'])
+stock_flow_timeseries_shape_plus_10 = stock_flow_timeseries_shape_plus_10.set_index(['year'])
+
+curve_shape_plus_10 = curve_shape_baseline * 1.1
+
+timesteps = np.arange(0, stock_flow_timeseries_shape_plus_10.shape[0])
+time_max = stock_flow_timeseries_shape_plus_10.shape[0]
+
+curve_surv_shape_plus_10 = scipy.stats.weibull_min.sf(timesteps, curve_shape_plus_10, 0, curve_scale_baseline)
+curve_surv_shape_plus_10 = pd.DataFrame(curve_surv_shape_plus_10, columns=['survival probability'])
+
+curve_surv_matrix_shape_plus_10 = pd.DataFrame(0, index=timesteps, columns=timesteps)
+for time in timesteps:
+    curve_surv_matrix_shape_plus_10.loc[time:, time] = curve_surv_shape_plus_10['survival probability'].values[:time_max - time]
+
+cohort_surv_matrix_shape_plus_10 = pd.DataFrame(0, index=timesteps, columns=timesteps)
+for time in timesteps:
+    cohort_surv_matrix_shape_plus_10.loc[:, time] = curve_surv_matrix_shape_plus_10.loc[:, time] * stock_flow_timeseries_shape_plus_10['inflow_baseline'].iloc[time]
+cohort_surv_matrix_shape_plus_10.index = stock_flow_timeseries_shape_plus_10.index
+
+stock_flow_timeseries_shape_plus_10['stock'] = cohort_surv_matrix_shape_plus_10.sum(axis=1)
+stock_flow_timeseries_shape_plus_10['nas'] = np.diff(stock_flow_timeseries_shape_plus_10['stock'], prepend=0)
+stock_flow_timeseries_shape_plus_10['outflow'] = stock_flow_timeseries_shape_plus_10['inflow_baseline'] - stock_flow_timeseries_shape_plus_10['nas']
+
+stock_flow_timeseries_shape_plus_10 = stock_flow_timeseries_shape_plus_10 / 1000  # conversion from kg to MT
+
+plt.plot(stock_flow_timeseries_shape_minus_10.index, stock_flow_timeseries_shape_minus_10['outflow'], label = 'outflow (-10% shape)', color='orange',  linestyle='--')
+plt.plot(stock_flow_timeseries_shape_plus_10.index, stock_flow_timeseries_shape_plus_10['outflow'], label='outflow (+10% shape)', color ='orange', linestyle=':')
+
+plt.xlabel("Year")
+plt.ylabel("Neodymium (t/yr)")
+ax.legend(loc='upper left')
+
+plt.legend()
+plt.show()
+
+plt.plot(stock_flow_timeseries_baseline.index, stock_flow_timeseries_baseline['stock'], label='Stocks baseline', color = 'gray', alpha = 0.7)
+plt.plot(stock_flow_timeseries_shape_plus_10.index, stock_flow_timeseries_shape_plus_10['stock'], label='stocks (+10% shape)', color = 'gray')
+plt.plot(stock_flow_timeseries_shape_minus_10.index, stock_flow_timeseries_shape_minus_10['stock'], label='stocks (-10% shape)', color = 'gray', alpha = 0.3)
+
+
+plt.xlabel('Year')
+plt.ylabel('Neodymium stocks (t)')
+plt.legend()
+plt.show()
+
+
+# -10% scale survival curve
+
+stock_flow_timeseries_scale_minus_10 = pd.read_excel('Calculations.xlsx', sheet_name='model_input', usecols=['year', 'inflow_baseline'])
+stock_flow_timeseries_scale_minus_10 = stock_flow_timeseries_scale_minus_10.set_index(['year'])
+
+curve_scale_minus_10 = curve_scale_baseline * 0.9
+
+timesteps = np.arange(0, stock_flow_timeseries_scale_minus_10.shape[0])
+time_max = stock_flow_timeseries_scale_minus_10.shape[0]
+
+curve_surv_scale_minus_10 = scipy.stats.weibull_min.sf(timesteps, curve_shape_baseline, 0, curve_scale_minus_10)
+curve_surv_scale_minus_10 = pd.DataFrame(curve_surv_scale_minus_10, columns=['survival probability'])
+
+curve_surv_matrix_scale_minus_10 = pd.DataFrame(0, index=timesteps, columns=timesteps)
+for time in timesteps:
+    curve_surv_matrix_scale_minus_10.loc[time:, time] = curve_surv_scale_minus_10['survival probability'].values[:time_max - time]
+
+cohort_surv_matrix_scale_minus_10 = pd.DataFrame(0, index=timesteps, columns=timesteps)
+for time in timesteps:
+    cohort_surv_matrix_scale_minus_10.loc[:, time] = curve_surv_matrix_scale_minus_10.loc[:, time] * stock_flow_timeseries_scale_minus_10['inflow_baseline'].iloc[time]
+cohort_surv_matrix_scale_minus_10.index = stock_flow_timeseries_scale_minus_10.index
+
+stock_flow_timeseries_scale_minus_10['stock'] = cohort_surv_matrix_scale_minus_10.sum(axis=1)
+stock_flow_timeseries_scale_minus_10['nas'] = np.diff(stock_flow_timeseries_scale_minus_10['stock'], prepend=0)
+stock_flow_timeseries_scale_minus_10['outflow'] = stock_flow_timeseries_scale_minus_10['inflow_baseline'] - stock_flow_timeseries_scale_minus_10['nas']
+
+stock_flow_timeseries_scale_minus_10 = stock_flow_timeseries_scale_minus_10 / 1000  
+
+# +10% scale survival curve
+
+stock_flow_timeseries_scale_plus_10 = pd.read_excel('Calculations.xlsx', sheet_name='model_input', usecols=['year', 'inflow_baseline'])
+stock_flow_timeseries_scale_plus_10 = stock_flow_timeseries_scale_plus_10.set_index(['year'])
+
+curve_scale_plus_10 = curve_scale_baseline * 1.1
+
+timesteps = np.arange(0, stock_flow_timeseries_baseline.shape[0])
+time_max = stock_flow_timeseries_baseline.shape[0]
+
+curve_surv_scale_plus_10 = scipy.stats.weibull_min.sf(timesteps, curve_shape_baseline, 0, curve_scale_plus_10)
+curve_surv_scale_plus_10 = pd.DataFrame(curve_surv_scale_plus_10, columns=['survival probability'])
+
+curve_surv_matrix_scale_plus_10 = pd.DataFrame(0, index=timesteps, columns=timesteps)
+for time in timesteps:
+    curve_surv_matrix_scale_plus_10.loc[time:, time] = curve_surv_scale_plus_10['survival probability'].values[:time_max - time]
+
+cohort_surv_matrix_scale_plus_10 = pd.DataFrame(0, index=timesteps, columns=timesteps)
+for time in timesteps:
+    cohort_surv_matrix_scale_plus_10.loc[:, time] = curve_surv_matrix_scale_plus_10.loc[:, time] * stock_flow_timeseries_scale_plus_10['inflow_baseline'].iloc[time]
+cohort_surv_matrix_scale_plus_10.index = stock_flow_timeseries_baseline.index
+
+stock_flow_timeseries_scale_plus_10['stock'] = cohort_surv_matrix_scale_plus_10.sum(axis=1)
+stock_flow_timeseries_scale_plus_10['nas'] = np.diff(stock_flow_timeseries_scale_plus_10['stock'], prepend=0)
+stock_flow_timeseries_scale_plus_10['outflow'] = stock_flow_timeseries_scale_plus_10['inflow_baseline'] - stock_flow_timeseries_scale_plus_10['nas']
+
+stock_flow_timeseries_scale_plus_10 = stock_flow_timeseries_scale_plus_10 / 1000  # conversion from kg to MT
+
+plt.plot(stock_flow_timeseries_baseline.index, stock_flow_timeseries_baseline['inflow_baseline'], label = 'inflow', color = 'blue')
+plt.plot(stock_flow_timeseries_baseline.index, stock_flow_timeseries_baseline['outflow'], label = 'outflow', color = 'orange')
+
+plt.plot(stock_flow_timeseries_scale_minus_10.index, stock_flow_timeseries_scale_minus_10['outflow'], label='outflow (-10% scale)', color='orange',  linestyle='--')
+plt.plot(stock_flow_timeseries_scale_plus_10.index, stock_flow_timeseries_scale_plus_10['outflow'], label='outflow (+10% scale)', color='orange',  linestyle=':')
+
+plt.xlabel("Year")
+plt.ylabel("Neodymium (t/yr)")
+plt.legend()
+ax.legend(loc='upper left')
+plt.show()
+
+plt.plot(stock_flow_timeseries_baseline.index, stock_flow_timeseries_baseline['stock'], label='Stocks baseline', color = 'gray', alpha = 0.7)
+plt.plot(stock_flow_timeseries_scale_plus_10.index, stock_flow_timeseries_scale_plus_10['stock'], label='stocks (+10% scale)', color = 'gray')
+plt.plot(stock_flow_timeseries_scale_minus_10.index, stock_flow_timeseries_scale_minus_10['stock'], label='stocks (-10% scale)', color = 'gray', alpha = 0.3)
+
+
+plt.xlabel('Year')
+plt.ylabel('Neodymium stocks (t)')
+plt.legend()
+plt.show()
+
+
+# + 10% of inflows
+
+baseline_110 = pd.DataFrame({'inflow_baseline_110': stock_flow_timeseries_baseline['inflow_baseline'] * 1.1})
+
+cohort_surv_matrix_baseline_110 = pd.DataFrame(0, index=timesteps, columns=timesteps)
+for time in timesteps:
+   cohort_surv_matrix_baseline_110.loc[:, time] = curve_surv_matrix_baseline.loc[:, time] * baseline_110['inflow_baseline_110'].iloc[time]
+
+cohort_surv_matrix_baseline_110.index = stock_flow_timeseries_baseline.index
+
+baseline_110['stock'] = cohort_surv_matrix_baseline_110.sum(axis=1)
+baseline_110['nas'] = np.diff(baseline_110['stock'], prepend=0)
+baseline_110['outflow'] = baseline_110['inflow_baseline_110'] - baseline_110['nas']
+
+
+# - 10% of inflows
+
+baseline_90 = pd.DataFrame({'inflow_baseline_90': stock_flow_timeseries_baseline['inflow_baseline'] * 0.9})
+
+cohort_surv_matrix_baseline_90 = pd.DataFrame(0, index=timesteps, columns=timesteps)
+for time in timesteps:
+   cohort_surv_matrix_baseline_90.loc[:, time] = curve_surv_matrix_baseline.loc[:, time] * baseline_90['inflow_baseline_90'].iloc[time]
+cohort_surv_matrix_baseline_90.index = stock_flow_timeseries_baseline.index
+
+baseline_90['stock'] = cohort_surv_matrix_baseline_90.sum(axis=1)
+baseline_90['nas'] = np.diff(baseline_90['stock'], prepend=0)
+baseline_90['outflow'] = baseline_90['inflow_baseline_90'] - baseline_90['nas']
+
+plt.plot(stock_flow_timeseries_baseline.index, stock_flow_timeseries_baseline['inflow_baseline'], label = 'inflow', color = 'blue')
+plt.plot(baseline_110['inflow_baseline_110'], label='Inflows (+10% inflow)', color = 'blue', alpha = 0.7, linestyle = ":")
+plt.plot(baseline_90['inflow_baseline_90'], label='Inflows (-10% inflow)', color = 'blue', alpha = 0.3, linestyle = "--")
+
+
+plt.plot(stock_flow_timeseries_baseline.index, stock_flow_timeseries_baseline['outflow'], label = 'outflow', color = 'orange')
+plt.plot(baseline_110['outflow'], label='Outflows (+10% inflow)', color = 'orange', alpha = 0.7, linestyle = ':')
+plt.plot(baseline_90['outflow'], label='Outflows (-10% inflow)', color = 'orange', alpha = 0.3, linestyle = '--')
+
+
+plt.xlabel('Year')
+plt.ylabel('Neodymium (t/yr)')
+plt.legend()
+plt.show()
+
+
+plt.plot(stock_flow_timeseries_baseline.index, stock_flow_timeseries_baseline['stock'], label='Stocks', color = 'grey')
+plt.plot(baseline_110.index, baseline_110['stock'], label='Stocks (inflows +10%)', color = 'grey', alpha = 0.7)
+plt.plot(baseline_90.index, baseline_90['stock'], label='Stocks (inflows -10%)', color = 'grey', alpha = 0.3)
+
+
+plt.xlabel('Year')
+plt.ylabel('Neodymium stocks (t)')
+plt.legend()
+
+
+
+
+
+
+
