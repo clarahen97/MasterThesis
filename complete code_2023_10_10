@@ -6,6 +6,30 @@ Created on Thu May 18 16:37:36 2023
 @author: clarahennings
 """
 
+#%% Plot absolute values offshore and onshore turbines
+
+import numpy as np
+import scipy.stats
+import pandas as pd
+from os import chdir
+import matplotlib.pyplot as plt
+
+stock_flow_timeseries_absolute = pd.read_excel('Appendix A_Hennings_Clara.xlsx', sheet_name='code_input', usecols=['year', 'inflow_onshore_absolute', 'inflow_offshore_absolute'])
+stock_flow_timeseries_absolute = stock_flow_timeseries_absolute.set_index(['year'])
+stock_flow_timeseries_absolute = stock_flow_timeseries_absolute.loc[:2022]
+
+bar_width = 0.35
+x = np.arange(len(stock_flow_timeseries_absolute.index))
+
+plt.bar(x - bar_width/2, stock_flow_timeseries_absolute['inflow_onshore_absolute'], bar_width, label='onshore', color = 'lightblue')
+plt.bar(x + bar_width/2, stock_flow_timeseries_absolute['inflow_offshore_absolute'], bar_width, label='offshore', color = 'darkblue')
+plt.xlabel('Year', fontsize=12)
+plt.ylabel('Number of turbines', fontsize=12)
+plt.xticks(x[::5], stock_flow_timeseries_absolute.index[::5])
+plt.legend()
+plt.gcf().set_size_inches(10, 6)
+plt.show()
+
 
 #%% ### Baseline 1989-2045 ###
 
@@ -56,9 +80,6 @@ plt.legend()
 plt.gcf().set_size_inches(10, 6)
 plt.show()
 
-excel_file_path = 'stock_flow_timeseries_baseline.xlsx'
-
-stock_flow_timeseries_baseline.to_excel(excel_file_path, index=False) 
 
 stock_flow_timeseries_baseline[['stock']].plot(kind="area", color='grey', legend=False)
 plt.xlabel('Year', fontsize=12)
@@ -1197,7 +1218,8 @@ plt.show()
 import matplotlib.pyplot as plt
 import pandas as pd
 
-# Comparison secondary neodymium across scenarios
+# Comparison total secondary neodymium across scenarios capped
+
 data = {"Sub-scenarios 1": [974, 1291, 1808],
     "Sub-scenarios 2": [1455, 1944, 2490],
     "Scenario": ["Scenario 1", "Scenario 2", "Scenario 3"]}
@@ -1220,13 +1242,14 @@ plt.show()
 # Comparison secondary neodymium satisfying demand across scenarios
 
 data_percent = {
-    "Values": [0.11, 0.17, 0.15, 0.22, 0.21, 0.29],
+    "Values": [0.11, 0.17, 0.15, 0.22, 0.21, 0.28],
     "Scenario": ["Scenario 1.1", "Scenario 1.2", "Scenario 2.1", "Scenario 2.2", "Scenario 3.1", "Scenario 3.2"]
 }
 
 df_percent = pd.DataFrame(data_percent)
 
-# Create a separate pie chart for each value
+# Relative amount of secondary neodymium to inflows capped
+
 for index, row in df_percent.iterrows():
     value = row['Values']
     category = row['Scenario']
@@ -1235,15 +1258,15 @@ for index, row in df_percent.iterrows():
     
     color = 'red' if category.endswith('2') else 'lightcoral'
     
-    plt.figure(figsize=(6, 6))  # Adjust the figure size as needed
+    plt.figure(figsize=(6, 6))  
     plt.pie([percentage, 100 - percentage], labels=[f'{percentage}%', ''], colors=[color, 'lightgrey'],
-            autopct='', startangle=140)
+            autopct='', startangle=140, textprops={'fontsize': 18})
     plt.axis('equal')  
     
-    plt.title(category)  
+    plt.title(category, fontsize = 18)  
     plt.show()
-
-# Comparison inflows with secondary neodymium across scenarios
+    
+# Comparison secondary neodymium across scenarios in 2030
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1254,19 +1277,18 @@ data2030 = {
     "Scenario": ["Scenario 1", "Scenario 2", "Scenario 3"]
 }
 
-colors = ['lightcoral', 'red']
+colors = ['lightcoral', 'red', 'blue'] 
 
-fig, ax = plt.subplots(figsize=(8, 6))
 bar_width = 0.4
 num_sub_scenarios = len(data2030) - 1
 
-# Create bars for each sub-scenario
+fig, ax = plt.subplots()
+
 for i, sub_scenario in enumerate(data2030.keys()):
     if sub_scenario != "Scenario":
         x_positions = np.arange(len(data2030[sub_scenario]))
         bar_heights = data2030[sub_scenario]
-        color = colors[i % num_sub_scenarios]  # Alternate colors
-
+        color = colors[i]  
         ax.bar(
             x_positions + (i * bar_width / num_sub_scenarios),
             bar_heights,
@@ -1275,32 +1297,30 @@ for i, sub_scenario in enumerate(data2030.keys()):
             color=color
         )
 
-
-adjusted_x_positions = np.arange(len(data2030["Scenario"])) + (bar_width / 4)
+adjusted_x_positions = np.arange(len(data2030["Scenario"]))
 
 ax.set_xticks(adjusted_x_positions)
 ax.set_xticklabels(data2030["Scenario"])
-plt.ylim(0,120)
+plt.ylim(0, 120)
 plt.ylabel('Secondary neodymium (t)')
 plt.xlabel('Scenario')
 ax.legend(loc='upper left')
 plt.show()
 
 
+# Summing of values for description of results
+
 filtered_df = stock_flow_timeseries_sc11.loc[2023:2045]
 total_inflow = filtered_df['inflow_baseline'].sum()
 print("Total Inflow Baseline (2023-2045):", total_inflow)
-
 
 filtered_df = stock_flow_timeseries_sc11.loc[2031:2045]
 total_inflow = filtered_df['inflow_baseline'].sum()
 print("Total Inflow Baseline (2031-2045):", total_inflow)
 
-
 filtered_df = stock_flow_timeseries_sc11.loc[2023:2030]
 total_inflow = filtered_df['inflow_baseline'].sum()
 print("Total Inflow Baseline (2023-2030):", total_inflow)
-
 
 filtered_df = stock_flow_timeseries_sc11.loc[2023:2030]
 total_inflow = filtered_df['sec_nd_sc11'].sum()
@@ -1310,8 +1330,6 @@ filtered_df = stock_flow_timeseries_sc11.loc[2031:2045]
 total_inflow = filtered_df['sec_nd_sc11'].sum()
 print("Total Sec Nd 1.1 (2031-2045):", total_inflow)
 
-
-
 filtered_df = stock_flow_timeseries_sc12.loc[2023:2030]
 total_inflow = filtered_df['sec_nd_sc12'].sum()
 print("Total Sec Nd 1.2 (2023-2030):", total_inflow)
@@ -1319,7 +1337,6 @@ print("Total Sec Nd 1.2 (2023-2030):", total_inflow)
 filtered_df = stock_flow_timeseries_sc12.loc[2031:2045]
 total_inflow = filtered_df['sec_nd_sc12'].sum()
 print("Total Sec Nd 1.2 (2031-2045):", total_inflow)
-
 
 filtered_df = stock_flow_timeseries_sc21.loc[2023:2030]
 total_inflow = filtered_df['sec_nd_sc21'].sum()
@@ -1329,7 +1346,6 @@ filtered_df = stock_flow_timeseries_sc21.loc[2031:2045]
 total_inflow = filtered_df['sec_nd_sc21'].sum()
 print("Total Sec Nd 2.1 (2031-2045):", total_inflow)
 
-
 filtered_df = stock_flow_timeseries_sc22.loc[2023:2030]
 total_inflow = filtered_df['sec_nd_sc22'].sum()
 print("Total Sec Nd 2.2 (2023-2030):", total_inflow)
@@ -1337,7 +1353,6 @@ print("Total Sec Nd 2.2 (2023-2030):", total_inflow)
 filtered_df = stock_flow_timeseries_sc22.loc[2031:2045]
 total_inflow = filtered_df['sec_nd_sc22'].sum()
 print("Total Sec Nd 2.2 (2031-2045):", total_inflow)
-
 
 filtered_df = stock_flow_timeseries_sc31.loc[2023:2030]
 total_inflow = filtered_df['sec_nd_sc31'].sum()
@@ -1347,7 +1362,6 @@ filtered_df = stock_flow_timeseries_sc31.loc[2031:2045]
 total_inflow = filtered_df['sec_nd_sc31'].sum()
 print("Total Sec Nd 3.1 (2031-2045):", total_inflow)
 
-
 filtered_df = sc_32_stock_flow_timeseries.loc[2023:2030]
 total_inflow = filtered_df['sec_nd_sc_32'].sum()
 print("Total Sec Nd 3.2 (2023-2030):", total_inflow)
@@ -1356,11 +1370,9 @@ filtered_df = sc_32_stock_flow_timeseries.loc[2031:2045]
 total_inflow = filtered_df['sec_nd_sc_32'].sum()
 print("Total Sec Nd 3.2 (2031-2045):", total_inflow)
 
-
 filtered_df = stock_flow_timeseries_sc11.loc[2023:2045]
 total_inflow = filtered_df['inflow_baseline'].sum()
 print("Total Inflow Baseline (2023-2045):", total_inflow)
-
 
 filtered_df = stock_flow_timeseries_sc11.loc[2023:2037]
 total_inflow = filtered_df['inflow_baseline'].sum()
@@ -1374,7 +1386,6 @@ filtered_df = sc_32_stock_flow_timeseries.loc[2023:2037]
 total_inflow = filtered_df['sec_nd_sc_32'].sum()
 print("Total Sec Nd 3.2 (2023-2037):", total_inflow)
 
-
 filtered_df = stock_flow_timeseries_baseline.loc[2023:2029]
 total_outflow = filtered_df['outflow'].sum()
 print("Total outflow 2023-2029:", total_outflow)
@@ -1386,7 +1397,6 @@ print("Sec Nd (2030-2045):", total_inflow)
 filtered_df = stock_flow_timeseries_sc12.loc[2030:2045]
 total_inflow = filtered_df['sec_nd_sc12'].sum()
 print("Sec Nd (2030-2045):", total_inflow)
-
 
 filtered_df = stock_flow_timeseries_baseline.loc[2023:2031]
 total_outflow = filtered_df['outflow'].sum()
@@ -1405,7 +1415,7 @@ filtered_df = stock_flow_timeseries_sc22.loc[2033:2045]
 total_inflow = filtered_df['sec_nd_sc22'].sum()
 print("Sec Nd (2033-2045):", total_inflow)
 
-# For outflows not smaller than secondary inflows
+# Comparison total secondary neodymium across scenarios, not capped
 
 data = {"Sub-scenarios 1": [950, 1166, 1808],
     "Sub-scenarios 2": [1431, 1931, 2490],
@@ -1426,14 +1436,15 @@ ax.set_ylim(0, 3000)
 ax.legend(loc='upper left')
 plt.show()
 
+# Relative amount of secondary neodymium to inflows, not capped
+
 data_percent = {
-    "Values": [0.11, 0.16, 0.13, 0.22, 0.21, 0.29],
+    "Values": [0.11, 0.17, 0.15, 0.22, 0.21, 0.29],
     "Scenario": ["Scenario 1.1", "Scenario 1.2", "Scenario 2.1", "Scenario 2.2", "Scenario 3.1", "Scenario 3.2"]
 }
 
 df_percent = pd.DataFrame(data_percent)
 
-# Create a separate pie chart for each value for outflows not smaller than secondary inflows
 for index, row in df_percent.iterrows():
     value = row['Values']
     category = row['Scenario']
@@ -1444,14 +1455,13 @@ for index, row in df_percent.iterrows():
     
     plt.figure(figsize=(6, 6)) 
     plt.pie([percentage, 100 - percentage], labels=[f'{percentage}%', ''], colors=[color, 'lightgrey'],
-            autopct='', startangle=140)
+            autopct='', startangle=140, textprops={'fontsize': 18})
     plt.axis('equal')  
     
-    plt.title(category) 
+    plt.title(category, fontsize = 18) 
     plt.show()
 
-
-# Recycling rate
+# Recycling rate plotting across all scenarios
 
 fig, ax = plt.subplots(figsize=(8, 4))
 gray = 'gray'
@@ -1468,7 +1478,6 @@ filtered_df_sc32_rates = recycling_rates_sc_32.loc['2023':'2045']
 plt.plot(filtered_df_sc31_rates.index, filtered_df_sc31_rates['rate_sc31'], label='Scenario 3.1', color=gray, alpha=0.4, linestyle='--')
 plt.plot(filtered_df_sc32_rates.index, filtered_df_sc32_rates['rate'], label='Scenario 3.2', color=gray, alpha=0.3)
 
-
 def percent_formatter(x, pos):
     return f'{x*100:.0f}%'
 
@@ -1483,8 +1492,7 @@ plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 plt.tight_layout()
 plt.show()
 
-
-
+# CMU rate plotting across all scenarios
 
 fig, ax = plt.subplots(figsize=(8, 4))
 gray = 'gray'
@@ -1501,7 +1509,6 @@ filtered_df_sc32_CMU = sc_32_stock_flow_timeseries.loc['2023':'2045']
 filtered_df_sc32_CMU.loc['2038':, 'circular_use_sc_32'] = 1
 plt.plot(filtered_df_sc31_CMU.index, filtered_df_sc31_CMU['circular_use_sc31'], label='Scenario 3.1', color=gray, alpha=0.4, linestyle='--')
 plt.plot(filtered_df_sc32_CMU.index, filtered_df_sc32_CMU['circular_use_sc_32'], label='Scenario 3.2', color=gray, alpha=0.3)
-
 
 def percent_formatter(x, pos):
     return f'{x*100:.0f}%'
@@ -1554,7 +1561,9 @@ stock_flow_timeseries_baseline['nas'] = np.diff(stock_flow_timeseries_baseline['
 stock_flow_timeseries_baseline['outflow'] = stock_flow_timeseries_baseline['inflow_baseline'] - stock_flow_timeseries_baseline['nas']
 
 stock_flow_timeseries_baseline = stock_flow_timeseries_baseline / 1000 #conversion from kg to t
-                                                         
+
+plt.plot(stock_flow_timeseries_baseline.index, stock_flow_timeseries_baseline['inflow_baseline'], label = 'inflow', color = 'blue')
+                                                      
 plt.plot(stock_flow_timeseries_baseline.index, stock_flow_timeseries_baseline['outflow'], label = 'outflow', color = 'orange')
 
 curve_shape_baseline = 4
@@ -1586,7 +1595,7 @@ stock_flow_timeseries_shape_minus_10['stock'] = cohort_surv_matrix_shape_minus_1
 stock_flow_timeseries_shape_minus_10['nas'] = np.diff(stock_flow_timeseries_shape_minus_10['stock'], prepend=0) 
 stock_flow_timeseries_shape_minus_10['outflow'] = stock_flow_timeseries_shape_minus_10['inflow_baseline'] - stock_flow_timeseries_shape_minus_10['nas']
 
-stock_flow_timeseries_shape_minus_10 = stock_flow_timeseries_shape_minus_10 / 1000 #conversion from kg to MT
+stock_flow_timeseries_shape_minus_10 = stock_flow_timeseries_shape_minus_10 / 1000 #conversion from kg to tons
 
 # + 10% sd survival curve
 
@@ -1762,4 +1771,5 @@ plt.plot(baseline_90.index, baseline_90['stock'], label='Stocks (inflows -10%)',
 plt.xlabel('Year')
 plt.ylabel('Neodymium stocks (t)')
 plt.legend()
+
 
