@@ -1386,8 +1386,8 @@ filtered_df = sc_32_stock_flow_timeseries.loc[2023:2037]
 total_inflow = filtered_df['sec_nd_sc_32'].sum()
 print("Total Sec Nd 3.2 (2023-2037):", total_inflow)
 
-filtered_df = stock_flow_timeseries_baseline.loc[2023:2029]
-total_outflow = filtered_df['outflow'].sum()
+filtered_df = stock_flow_timeseries_sc11.loc[2023:2029]
+total_outflow = filtered_df['outflow_sc11'].sum()
 print("Total outflow 2023-2029:", total_outflow)
 
 filtered_df = stock_flow_timeseries_sc11.loc[2030:2045]
